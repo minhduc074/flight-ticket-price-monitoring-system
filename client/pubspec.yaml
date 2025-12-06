@@ -1,0 +1,47 @@
+name: fly_ticket_client
+description: Vietnam Flight Ticket Price Monitor Client
+
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State management
+  provider: ^6.1.1
+  
+  # HTTP client
+  http: ^1.1.2
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # Firebase
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.2.1
+  
+  # UI components
+  cupertino_icons: ^1.0.6
+  flutter_local_notifications: ^18.0.1
+  intl: ^0.19.0
+  
+  # Date picker
+  table_calendar: ^3.0.9
+  
+  # Dropdown search
+  dropdown_search: ^5.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/

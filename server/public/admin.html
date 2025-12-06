@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fly Ticket Monitor - Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="app">
+    <!-- Login Form -->
+    <div v-if="!isAuthenticated" class="min-h-screen flex items-center justify-center">
+      <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-800">
+          ✈️ Fly Ticket Monitor
+        </h1>
+        <h2 class="text-lg font-semibold text-center mb-6 text-gray-600">Admin Login</h2>
+        
+        <div v-if="loginError" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {{ loginError }}
+        </div>
+        
+        <form @submit.prevent="login">
+          <div class="mb-4">
+            <label class="block text-gray-700 text-sm font-bold mb-2">Email</label>
+            <input v-model="loginForm.email" type="email" 
+                   class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="admin@flyticket.com" required>
+          </div>
+          
+          <div class="mb-6">
+            <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
+            <input v-model="loginForm.password" type="password" 
+                   class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="••••••••" required>
+          </div>
+          
+          <button type="submit" :disabled="isLoading"
+                  class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {{ isLoading ? 'Đang đăng nhập...' : 'Đăng nhập' }}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div v-else class="min-h-screen">
+      <!-- Header -->
+      <header class="bg-white shadow">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 class="text-xl font-bold text-gray-800">✈️ Fly Ticket Monitor - Admin</h1>
+          <div class="flex items-center gap-4">
+            <span class="text-gray-600">{{ user?.email }}</span>
+            <button @click="logout" class="text-red-600 hover:text-red-800">Đăng xuất</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Navigation Tabs -->
+      <nav class="bg-white border-b">
+        <div class="max-w-7xl mx-auto px-4">
+          <div class="flex space-x-8">
+            <button v-for="tab in tabs" :key="tab.id" 
+                    @click="activeTab = tab.id"
+                    :class="['py-4 px-1 border-b-2 font-medium text-sm',
+                             activeTab === tab.id 
+                               ? 'border-blue-500 text-blue-600' 
+                               : 'border-transparent text-gray-500 hover:text-gray-700']">
+              {{ tab.name }}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Dashboard Tab -->
+        <div v-if="activeTab === 'dashboard'">
+          <!-- Stats Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-sm font-medium text-gray-500">Tổng người dùng</div>
+              <div class="text-3xl font-bold text-gray-900">{{ dashboard.stats?.totalUsers || 0 }}</div>
+              <div class="text-sm text-green-600">{{ dashboard.stats?.activeUsers || 0 }} đang hoạt động</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-sm font-medium text-gray-500">Tổng đăng ký theo dõi</div>
+              <div class="text-3xl font-bold text-gray-900">{{ dashboard.stats?.totalSubscriptions || 0 }}</div>
+              <div class="text-sm text-green-600">{{ dashboard.stats?.activeSubscriptions || 0 }} đang hoạt động</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-sm font-medium text-gray-500">Thông báo đã gửi</div>
+              <div class="text-3xl font-bold text-gray-900">{{ dashboard.stats?.notificationsSent || 0 }}</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <div class="text-sm font-medium text-gray-500">Hành động</div>
+              <button @click="triggerPriceCheck" :disabled="isLoading"
+                      class="mt-2 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 disabled:opacity-50 text-sm">
+                Kiểm tra giá ngay
+              </button>
+            </div>
+          </div>
+
+          <!-- Top Routes -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow p-6">
+              <h3 class="text-lg font-semibold mb-4">Tuyến bay phổ biến</h3>
+              <div v-if="dashboard.topRoutes?.length" class="space-y-3">
+                <div v-for="route in dashboard.topRoutes" :key="`${route.from}-${route.to}`"
+                     class="flex justify-between items-center py-2 border-b">
+                  <span class="font-medium">{{ route.from }} → {{ route.to }}</span>
+                  <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
+                    {{ route.count }} người theo dõi
+                  </span>
+                </div>
+              </div>
+              <div v-else class="text-gray-500">Chưa có dữ liệu</div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+              <h3 class="text-lg font-semibold mb-4">Đăng ký gần đây</h3>
+              <div v-if="dashboard.recentSubscriptions?.length" class="space-y-3">
+                <div v-for="sub in dashboard.recentSubscriptions" :key="sub.id"
+                     class="py-2 border-b">
+                  <div class="flex justify-between">
+                    <span class="font-medium">{{ sub.from }} → {{ sub.to }}</span>
+                    <span :class="sub.isActive ? 'text-green-600' : 'text-gray-400'">
+                      {{ sub.isActive ? '●' : '○' }}
+                    </span>
+                  </div>
+                  <div class="text-sm text-gray-500">
+                    {{ sub.user?.email || 'N/A' }} - {{ formatPrice(sub.expectedPrice) }}
+                  </div>
+                </div>
+              </div>
+              <div v-else class="text-gray-500">Chưa có dữ liệu</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div v-if="activeTab === 'users'">
+          <div class="bg-white rounded-lg shadow">
+            <div class="p-4 border-b flex justify-between items-center">
+              <h3 class="text-lg font-semibold">Danh sách người dùng</h3>
+              <input v-model="userSearch" @input="debounceLoadUsers" type="text" 
+                     placeholder="Tìm kiếm..."
+                     class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <table class="w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tên</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Đăng ký</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày tạo</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr v-for="user in users.list" :key="user.id">
+                  <td class="px-6 py-4">{{ user.email }}</td>
+                  <td class="px-6 py-4">{{ user.name }}</td>
+                  <td class="px-6 py-4">{{ user.subscriptionCount }}</td>
+                  <td class="px-6 py-4">{{ formatDate(user.createdAt) }}</td>
+                  <td class="px-6 py-4">
+                    <button @click="toggleUserStatus(user)"
+                            :class="user.isActive 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'"
+                            class="px-3 py-1 rounded-full text-sm">
+                      {{ user.isActive ? 'Hoạt động' : 'Đã khóa' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="p-4 border-t flex justify-between items-center">
+              <span class="text-sm text-gray-500">
+                Tổng: {{ users.pagination?.total || 0 }} người dùng
+              </span>
+              <div class="flex gap-2">
+                <button @click="loadUsers(users.pagination.page - 1)" 
+                        :disabled="users.pagination?.page <= 1"
+                        class="px-3 py-1 border rounded disabled:opacity-50">
+                  Trước
+                </button>
+                <span class="px-3 py-1">{{ users.pagination?.page }}/{{ users.pagination?.pages }}</span>
+                <button @click="loadUsers(users.pagination.page + 1)"
+                        :disabled="users.pagination?.page >= users.pagination?.pages"
+                        class="px-3 py-1 border rounded disabled:opacity-50">
+                  Sau
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subscriptions Tab -->
+        <div v-if="activeTab === 'subscriptions'">
+          <div class="bg-white rounded-lg shadow">
+            <div class="p-4 border-b flex flex-wrap gap-4 items-center">
+              <h3 class="text-lg font-semibold">Danh sách đăng ký theo dõi</h3>
+              <select v-model="subscriptionFilter.active" @change="loadSubscriptions(1)"
+                      class="px-3 py-2 border rounded-lg">
+                <option value="">Tất cả trạng thái</option>
+                <option value="true">Đang hoạt động</option>
+                <option value="false">Đã dừng</option>
+              </select>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Người dùng</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tuyến bay</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ngày bay</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá kỳ vọng</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Giá hiện tại</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trạng thái</th>                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hành động</th>                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="sub in subscriptions.list" :key="sub.id">
+                    <td class="px-6 py-4">
+                      <div>{{ sub.user?.name || 'N/A' }}</div>
+                      <div class="text-sm text-gray-500">{{ sub.user?.email || '' }}</div>
+                    </td>
+                    <td class="px-6 py-4 font-medium">{{ sub.from }} → {{ sub.to }}</td>
+                    <td class="px-6 py-4">{{ formatDate(sub.date) }}</td>
+                    <td class="px-6 py-4">{{ formatPrice(sub.expectedPrice) }}</td>
+                    <td class="px-6 py-4" :class="getPriceClass(sub)">
+                      {{ sub.currentPrice ? formatPrice(sub.currentPrice) : 'N/A' }}
+                    </td>
+                    <td class="px-6 py-4">
+                      <span :class="sub.isActive 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'"
+                            class="px-2 py-1 rounded-full text-sm">
+                        {{ sub.isActive ? 'Hoạt động' : 'Đã dừng' }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4">
+                      <button @click="deleteSubscription(sub)" 
+                              class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm">
+                        Xóa
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="p-4 border-t flex justify-between items-center">
+              <span class="text-sm text-gray-500">
+                Tổng: {{ subscriptions.pagination?.total || 0 }} đăng ký
+              </span>
+              <div class="flex gap-2">
+                <button @click="loadSubscriptions(subscriptions.pagination.page - 1)"
+                        :disabled="subscriptions.pagination?.page <= 1"
+                        class="px-3 py-1 border rounded disabled:opacity-50">
+                  Trước
+                </button>
+                <span class="px-3 py-1">{{ subscriptions.pagination?.page }}/{{ subscriptions.pagination?.pages }}</span>
+                <button @click="loadSubscriptions(subscriptions.pagination.page + 1)"
+                        :disabled="subscriptions.pagination?.page >= subscriptions.pagination?.pages"
+                        class="px-3 py-1 border rounded disabled:opacity-50">
+                  Sau
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted, watch } = Vue;
+
+    createApp({
+      setup() {
+        const API_URL = '/api';
+        
+        // Auth state
+        const isAuthenticated = ref(false);
+        const token = ref('');
+        const user = ref(null);
+        const isLoading = ref(false);
+        const loginError = ref('');
+        
+        const loginForm = ref({
+          email: '',
+          password: ''
+        });
+
+        // Dashboard state
+        const activeTab = ref('dashboard');
+        const tabs = [
+          { id: 'dashboard', name: 'Dashboard' },
+          { id: 'users', name: 'Người dùng' },
+          { id: 'subscriptions', name: 'Đăng ký theo dõi' }
+        ];
+
+        const dashboard = ref({});
+        const users = ref({ list: [], pagination: {} });
+        const subscriptions = ref({ list: [], pagination: {} });
+        const userSearch = ref('');
+        const subscriptionFilter = ref({ active: '' });
+
+        // API helper
+        const api = async (endpoint, options = {}) => {
+          const headers = {
+            'Content-Type': 'application/json',
+            ...(token.value && { 'Authorization': `Bearer ${token.value}` })
+          };
+
+          const response = await fetch(`${API_URL}${endpoint}`, {
+            ...options,
+            headers
+          });
+
+          const data = await response.json();
+          
+          if (!response.ok) {
+            throw new Error(data.message || 'API Error');
+          }
+          
+          return data;
+        };
+
+        // Auth methods
+        const login = async () => {
+          isLoading.value = true;
+          loginError.value = '';
+          
+          try {
+            const data = await api('/auth/login', {
+              method: 'POST',
+              body: JSON.stringify(loginForm.value)
+            });
+            
+            if (data.data.user.role !== 'admin') {
+              throw new Error('Chỉ admin mới có quyền truy cập');
+            }
+
+            token.value = data.data.token;
+            user.value = data.data.user;
+            isAuthenticated.value = true;
+            localStorage.setItem('adminToken', token.value);
+            
+            loadDashboard();
+          } catch (error) {
+            loginError.value = error.message;
+          } finally {
+            isLoading.value = false;
+          }
+        };
+
+        const logout = () => {
+          token.value = '';
+          user.value = null;
+          isAuthenticated.value = false;
+          localStorage.removeItem('adminToken');
+        };
+
+        const checkAuth = async () => {
+          const savedToken = localStorage.getItem('adminToken');
+          if (savedToken) {
+            token.value = savedToken;
+            try {
+              const data = await api('/auth/profile');
+              if (data.data.user.role === 'admin') {
+                user.value = data.data.user;
+                isAuthenticated.value = true;
+                loadDashboard();
+              } else {
+                logout();
+              }
+            } catch (error) {
+              logout();
+            }
+          }
+        };
+
+        // Dashboard methods
+        const loadDashboard = async () => {
+          try {
+            const data = await api('/admin/dashboard');
+            dashboard.value = data.data;
+          } catch (error) {
+            console.error('Failed to load dashboard:', error);
+          }
+        };
+
+        const loadUsers = async (page = 1) => {
+          try {
+            const params = new URLSearchParams({
+              page: page.toString(),
+              ...(userSearch.value && { search: userSearch.value })
+            });
+            const data = await api(`/admin/users?${params}`);
+            users.value = {
+              list: data.data.users,
+              pagination: data.data.pagination
+            };
+          } catch (error) {
+            console.error('Failed to load users:', error);
+          }
+        };
+
+        const loadSubscriptions = async (page = 1) => {
+          try {
+            const params = new URLSearchParams({
+              page: page.toString(),
+              ...(subscriptionFilter.value.active && { active: subscriptionFilter.value.active })
+            });
+            const data = await api(`/admin/subscriptions?${params}`);
+            subscriptions.value = {
+              list: data.data.subscriptions,
+              pagination: data.data.pagination
+            };
+          } catch (error) {
+            console.error('Failed to load subscriptions:', error);
+          }
+        };
+
+        const toggleUserStatus = async (targetUser) => {
+          try {
+            await api(`/admin/users/${targetUser.id}/status`, {
+              method: 'PUT',
+              body: JSON.stringify({ isActive: !targetUser.isActive })
+            });
+            targetUser.isActive = !targetUser.isActive;
+          } catch (error) {
+            console.error('Failed to update user status:', error);
+          }
+        };
+
+        const triggerPriceCheck = async () => {
+          isLoading.value = true;
+          try {
+            await api('/admin/trigger-price-check', { method: 'POST' });
+            alert('Đã kích hoạt kiểm tra giá!');
+          } catch (error) {
+            alert('Lỗi: ' + error.message);
+          } finally {
+            isLoading.value = false;
+          }
+        };
+
+        const deleteSubscription = async (sub) => {
+          if (!confirm(`Bạn có chắc muốn xóa đăng ký ${sub.from} → ${sub.to} của ${sub.user?.email || 'người dùng này'}?`)) {
+            return;
+          }
+          
+          try {
+            await api(`/admin/subscriptions/${sub.id}`, { method: 'DELETE' });
+            alert('Đã xóa đăng ký thành công!');
+            loadSubscriptions(subscriptions.value.pagination.page);
+          } catch (error) {
+            alert('Lỗi: ' + error.message);
+          }
+        };
+
+        // Helpers
+        const formatPrice = (price) => {
+          if (!price) return 'N/A';
+          return new Intl.NumberFormat('vi-VN', {
+            style: 'currency',
+            currency: 'VND'
+          }).format(price);
+        };
+
+        const formatDate = (dateStr) => {
+          if (!dateStr) return 'N/A';
+          return new Date(dateStr).toLocaleDateString('vi-VN');
+        };
+
+        const getPriceClass = (sub) => {
+          if (!sub.currentPrice) return '';
+          if (sub.currentPrice <= sub.expectedPrice) return 'text-green-600 font-bold';
+          return 'text-red-600';
+        };
+
+        let debounceTimer;
+        const debounceLoadUsers = () => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => loadUsers(1), 300);
+        };
+
+        // Watch tab changes
+        watch(activeTab, (newTab) => {
+          if (newTab === 'users') loadUsers();
+          if (newTab === 'subscriptions') loadSubscriptions();
+        });
+
+        onMounted(checkAuth);
+
+        return {
+          isAuthenticated,
+          isLoading,
+          loginError,
+          loginForm,
+          user,
+          activeTab,
+          tabs,
+          dashboard,
+          users,
+          subscriptions,
+          userSearch,
+          subscriptionFilter,
+          login,
+          logout,
+          loadUsers,
+          loadSubscriptions,
+          toggleUserStatus,
+          triggerPriceCheck,
+          deleteSubscription,
+          formatPrice,
+          formatDate,
+          getPriceClass,
+          debounceLoadUsers
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

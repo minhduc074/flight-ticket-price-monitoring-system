@@ -1,17 +1,16 @@
 const { Sequelize } = require('sequelize');
 const config = require('./index');
 
-// Use DATABASE_URL if available (for Render.com), otherwise use individual config
-const sequelize = process.env.DATABASE_URL
-  ? new Sequelize(process.env.DATABASE_URL, {
+// Support both connection URL (Vercel Postgres) and individual params
+const sequelize = config.database.url
+  ? new Sequelize(config.database.url, {
       dialect: 'postgres',
-      protocol: 'postgres',
       logging: config.nodeEnv === 'development' ? console.log : false,
       dialectOptions: {
-        ssl: {
+        ssl: config.nodeEnv === 'production' ? {
           require: true,
-          rejectUnauthorized: false // For Render.com SSL
-        }
+          rejectUnauthorized: false
+        } : false
       },
       pool: {
         max: 5,
@@ -29,6 +28,12 @@ const sequelize = process.env.DATABASE_URL
         port: config.database.port,
         dialect: 'postgres',
         logging: config.nodeEnv === 'development' ? console.log : false,
+        dialectOptions: {
+          ssl: config.nodeEnv === 'production' ? {
+            require: true,
+            rejectUnauthorized: false
+          } : false
+        },
         pool: {
           max: 5,
           min: 0,
@@ -41,15 +46,10 @@ const sequelize = process.env.DATABASE_URL
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
-    if (process.env.DATABASE_URL) {
-      console.log('PostgreSQL Connected: Using DATABASE_URL (Production)');
-    } else {
-      console.log(`PostgreSQL Connected: ${config.database.host}:${config.database.port}/${config.database.name}`);
-    }
+    console.log(`PostgreSQL Connected: ${config.database.host}:${config.database.port}/${config.database.name}`);
     return sequelize;
   } catch (error) {
     console.error('PostgreSQL connection error:', error.message);
-    console.error('Full error:', error);
     process.exit(1);
   }
 };

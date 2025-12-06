@@ -345,3 +345,22 @@ exports.triggerPriceCheck = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Sync database models (for initial deployment)
+ */
+exports.syncDatabase = async (req, res, next) => {
+  try {
+    const { force = false } = req.query;
+    
+    // Sync database models
+    await sequelize.sync({ alter: !force, force: force === 'true' });
+    
+    res.json({
+      success: true,
+      message: `Database models synced successfully (force: ${force})`
+    });
+  } catch (error) {
+    next(error);
+  }
+};

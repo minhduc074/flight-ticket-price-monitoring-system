@@ -2,6 +2,31 @@
 
 A complete system for monitoring Vietnam domestic flight ticket prices with automatic notifications when prices drop.
 
+## 🚀 Quick Deploy to Vercel
+
+**Ready to deploy?** See our comprehensive deployment documentation:
+
+- 📚 **[Documentation Index](DOCUMENTATION_INDEX.md)** - Complete guide to all documentation
+- 🎯 **[Database Name Guide](DATABASE_NAME_VISUAL_GUIDE.md)** - Is it random? (NO! You choose it!)
+- ✅ **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Step-by-step checklist
+- 📖 **[Full Deployment Guide](README_VERCEL_DEPLOYMENT.md)** - Complete instructions
+- ⚡ **[Quick Reference](QUICK_REFERENCE.md)** - Common commands and quick tips
+
+### Quick Start Deployment
+```bash
+# Validate configuration
+cd server
+npm run validate:vercel
+
+# Run deployment helper
+.\deploy-helper.ps1  # Windows
+./deploy-helper.sh   # Linux/Mac
+```
+
+**Database Question**: The database name is **NOT random** - YOU choose it! See [Database Name Guide](DATABASE_NAME_VISUAL_GUIDE.md) for details.
+
+---
+
 ## Architecture
 
 ```
@@ -151,15 +176,43 @@ flutter run
 
 ## Production Deployment
 
-### Server
-1. Set `NODE_ENV=production`
-2. Use a production MongoDB (MongoDB Atlas)
-3. Configure Firebase with production credentials
-4. Deploy to a cloud platform (Heroku, AWS, DigitalOcean, etc.)
-5. Set up HTTPS
+### Deploy to Vercel (Recommended)
+📚 **[Complete Vercel Deployment Guide](README_VERCEL_DEPLOYMENT.md)**
 
-### Client
-1. Update `baseUrl` to production server
+Quick steps:
+1. Push code to GitHub/GitLab/Bitbucket
+2. Import to Vercel at https://vercel.com/
+3. Configure environment variables (see deployment guide)
+4. Deploy!
+
+Use the helper script:
+```bash
+# Windows PowerShell
+.\deploy-helper.ps1
+
+# Linux/Mac
+./deploy-helper.sh
+```
+
+📋 **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Step-by-step checklist
+
+### Database Configuration
+**The database name is NOT random - YOU specify it:**
+- Vercel Postgres: default is `verceldb` (or create custom name)
+- External providers (Supabase/Neon/Railway): you choose during setup
+- Set `DB_NAME` or `POSTGRES_DATABASE` to match your chosen name
+
+### Other Deployment Options
+
+#### Server
+1. Set `NODE_ENV=production`
+2. Use a production PostgreSQL database (Supabase, Neon, Railway, etc.)
+3. Configure Firebase with production credentials
+4. Deploy to cloud platform (Vercel, AWS, DigitalOcean, Railway, etc.)
+5. Set up HTTPS (automatic on Vercel)
+
+#### Client
+1. Update `baseUrl` to production server in `lib/config/app_config.dart`
 2. Build release APK: `flutter build apk --release`
 3. Sign the APK for Google Play Store
 

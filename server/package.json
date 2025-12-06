@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "db:sync": "node src/config/sync-db.js"
+    "db:sync": "node src/config/sync-db.js",
+    "validate:vercel": "node validate-vercel-config.js"
   },
   "dependencies": {
     "express": "^4.18.2",

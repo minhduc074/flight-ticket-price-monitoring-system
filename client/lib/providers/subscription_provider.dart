@@ -73,7 +73,7 @@ class SubscriptionProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      await _subscriptionService.createSubscription(
+      final subscription = await _subscriptionService.createSubscription(
         fromAirport: fromAirport,
         toAirport: toAirport,
         date: date,

@@ -1,0 +1,12 @@
+{
+  "name": "fly-ticket-noti-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install-server": "cd server && npm install",
+    "build": "npm run install-server"
+  },
+  "workspaces": [
+    "server"
+  ]
+}

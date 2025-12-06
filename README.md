@@ -20,7 +20,7 @@ fly_ticket_noti/
 │   │   ├── controllers/  # Route handlers
 │   │   ├── jobs/         # Cron jobs (price checker)
 │   │   ├── middleware/   # Auth & error handling
-│   │   ├── models/       # MongoDB schemas
+│   │   ├── models/       # PostgreSQL models
 │   │   ├── routes/       # API routes
 │   │   └── services/     # Business logic
 │   └── public/           # Admin web panel
@@ -41,9 +41,10 @@ fly_ticket_noti/
 - ✅ User authentication (JWT)
 - ✅ Flight search API (Vietnam airports)
 - ✅ Price subscription system
-- ✅ Automated price checking (every 15 minutes)
+- ✅ Automated price checking (every 6 hours)
 - ✅ Push notifications via Firebase Cloud Messaging
-- ✅ Admin web dashboard
+- ✅ Admin web dashboard with API usage monitoring
+- ✅ Smart API rotation to save quota
 
 ### Client (Flutter Android)
 - ✅ User login/registration
@@ -57,10 +58,11 @@ fly_ticket_noti/
 
 ### 1. Prerequisites
 
-- Node.js 18+
-- MongoDB
+- Node.js 24+
+- PostgreSQL
 - Flutter SDK 3.0+
 - Firebase project
+- RapidAPI account (for flight data)
 
 ### 2. Setup Server
 
@@ -76,7 +78,32 @@ Access admin panel at: http://localhost:3000/admin
 
 Default admin: admin@flyticket.com / admin123456
 
-### 3. Setup Firebase
+### 3. API Keys Setup
+
+The system uses multiple flight data APIs with automatic rotation:
+
+#### RapidAPI (Primary Sources)
+1. Sign up at [RapidAPI](https://rapidapi.com/)
+2. Subscribe to these APIs:
+   - **Google Flights API** (150 requests/month free)
+   - **Agoda Flight Search** (500 requests/month free)
+   - **Skyscanner API** (500 requests/month free)
+3. Get your RapidAPI key from account settings
+4. Add to `.env`: `RAPIDAPI_KEY=your_key_here`
+
+#### SerpAPI (Alternative)
+1. Sign up at [SerpAPI](https://serpapi.com/)
+2. Get API key (250 searches/month free)
+3. Add to `.env`: `SERPAPI_KEY=your_key_here`
+
+#### FlightAPI.io (Optional)
+1. Sign up at [FlightAPI.io](https://www.flightapi.io/)
+2. Get API key (100 requests/month free)
+3. Add to `.env`: `FLIGHTAPI_IO_KEY=your_key_here`
+
+**Smart API Rotation**: The system automatically uses one API at a time. If one reaches its quota or returns an error, it switches to the next available API. This saves your quota limits.
+
+### 4. Setup Firebase
 
 1. Create project at [Firebase Console](https://console.firebase.google.com)
 2. Enable Cloud Messaging
@@ -85,7 +112,7 @@ Default admin: admin@flyticket.com / admin123456
 5. Update server `.env` with Firebase credentials
 6. Place `google-services.json` in `client/android/app/`
 
-### 4. Setup Flutter Client
+### 5. Setup Flutter Client
 
 ```bash
 cd client
@@ -132,7 +159,27 @@ flutter run
 | GET | /api/admin/users | List all users |
 | PUT | /api/admin/users/:id/status | Update user status |
 | GET | /api/admin/subscriptions | List all subscriptions |
+| GET | /api/admin/api-usage | API usage statistics |
 | POST | /api/admin/trigger-price-check | Manual price check |
+
+## Flight Data Sources
+
+The system uses multiple flight data APIs with smart rotation:
+
+### Active APIs
+- **Google Flights** (via RapidAPI) - 150 requests/month
+- **Agoda Flight Search** (via RapidAPI) - 500 requests/month
+- **Skyscanner** (via RapidAPI) - 500 requests/month
+- **SerpAPI Google Flights** - 250 searches/month
+- **FlightAPI.io** - 100 requests/month
+
+### Smart API Rotation
+- Uses **one API at a time** to save quota
+- If API returns error or reaches limit → switches to next API
+- If API returns **no results** (no flights available) → **stops** (no need to check others)
+- Tracks usage in admin dashboard with color-coded warnings
+- Admin panel shows: calls made / success / fails / rate-limited per month
+
 
 ## Vietnam Airports Supported
 
@@ -156,6 +203,20 @@ flutter run
 1. **Price Drop** - When price drops by ≥5% or ≥100,000 VND
 2. **Below Expected** - When price reaches user's expected price
 3. **Ticket Available** - When tickets become available for a route
+
+## Admin Dashboard
+
+Access at `/admin` (or `http://localhost:3000/admin` in development)
+
+Features:
+- 📊 **Dashboard**: Overview stats (users, subscriptions, searches)
+- 👥 **Users**: Manage user accounts and status
+- 📝 **Subscriptions**: View and manage all price subscriptions
+- 📡 **API Usage**: Monitor API calls, quotas, and rate limits
+  - Visual progress bars for each API
+  - Color-coded warnings (red at 80%+ usage)
+  - Success/fail/rate-limited counts per month
+- 🔔 **Manual Price Check**: Trigger immediate price check for testing
 
 ## Production Deployment
 

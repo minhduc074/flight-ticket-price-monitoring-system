@@ -74,6 +74,10 @@ lib/
 5. **Search Flights Screen** - Search and subscribe to flights
 6. **Subscription Detail Screen** - View/manage subscription
 
+## Timezone
+
+- All dates and times displayed in the UI are shown in Vietnam timezone (UTC+7).
+
 ## Push Notifications
 
 The app uses Firebase Cloud Messaging (FCM) for push notifications. Notifications are sent when:

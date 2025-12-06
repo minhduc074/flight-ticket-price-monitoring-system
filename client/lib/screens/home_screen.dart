@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../utils/date_time_utils.dart';
 import '../providers/auth_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../models/subscription.dart';
@@ -36,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return DateFormat('dd/MM/yyyy').format(date);
+    return DateTimeUtils.formatDate(date);
   }
 
   Future<void> _logout() async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../utils/date_time_utils.dart';
 import '../providers/subscription_provider.dart';
 import '../models/subscription.dart';
 
@@ -49,11 +50,11 @@ class _SubscriptionDetailScreenState extends State<SubscriptionDetailScreen> {
   }
 
   String _formatDate(DateTime date) {
-    return DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(date);
+    return DateTimeUtils.formatFullDate(date);
   }
 
   String _formatDateTime(DateTime date) {
-    return DateFormat('dd/MM/yyyy HH:mm', 'vi_VN').format(date);
+    return DateTimeUtils.formatDateTime(date);
   }
 
   Future<void> _toggleActive() async {

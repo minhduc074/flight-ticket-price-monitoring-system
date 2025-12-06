@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../utils/date_time_utils.dart';
 import 'package:dropdown_search/dropdown_search.dart';
 import 'package:table_calendar/table_calendar.dart';
 import '../providers/subscription_provider.dart';
@@ -260,7 +261,7 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                               prefixIcon: Icon(Icons.calendar_today),
                             ),
                             child: Text(
-                              DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(_selectedDate),
+                              DateTimeUtils.formatFullDate(_selectedDate),
                             ),
                           ),
                         ),

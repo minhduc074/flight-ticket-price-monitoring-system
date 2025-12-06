@@ -653,7 +653,12 @@
 
         const formatDate = (dateStr) => {
           if (!dateStr) return 'N/A';
-          return new Date(dateStr).toLocaleDateString('vi-VN');
+          const dt = new Date(dateStr);
+          // Convert to UTC then add 7 hours for Vietnam timezone
+          const utcMs = dt.getTime() + (dt.getTimezoneOffset() * 60000);
+          const vietMs = utcMs + (7 * 60 * 60 * 1000);
+          const vietDate = new Date(vietMs);
+          return vietDate.toLocaleDateString('vi-VN');
         };
 
         const getPriceClass = (sub) => {

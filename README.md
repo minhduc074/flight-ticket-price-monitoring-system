@@ -1,13 +1,6 @@
 # Vietnam Flight Ticket Price Monitor
 
 A complete system for monitoring Vietnam domestic flight ticket prices with automatic notifications when prices drop.
-
-### Quick Start Deployment
-```bash
-# Run deployment helper
-.\deploy-render.ps1  # Windows
-./deploy-render.sh   # Linux/Mac
-```
 ---
 
 ## Architecture

@@ -1,6 +1,6 @@
 class AppConfig {
   // Production server URL
-  static const String baseUrl = 'https://flight-ticket-price-monitoring-system.onrender.com/api';
+  static const String baseUrl = 'https://flight-ticket-price-monitoring-syst-five.vercel.app/api';
   
   // For local development, uncomment one of these:
   // static const String baseUrl = 'http://10.0.2.2:3000/api'; // Android emulator

@@ -13,9 +13,5 @@
       "memory": 1024,
       "maxDuration": 10
     }
-  },
-  "env": {
-    "PRISMA_DATABASE_URL": "@prisma_database_url",
-    "DATABASE_URL": "@database_url"
   }
 }

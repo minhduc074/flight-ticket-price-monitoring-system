@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "db:sync": "node src/config/sync-db.js",
-    "validate:vercel": "node validate-vercel-config.js"
+    "validate:vercel": "node validate-vercel-config.js",
+    "price-check": "node -e \"require('dotenv').config(); require('./src/jobs/priceChecker').runPriceCheck();\""
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -1,0 +1,51 @@
+# Render.com ignore file
+# Files and directories to exclude from deployment
+
+# Client (Flutter app - not needed for server deployment)
+client/
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional - include if you want)
+# README*.md
+# *.md
+
+# Test files
+test/
+*.test.js
+*.spec.js
+
+# Build artifacts (will be regenerated)
+node_modules/
+dist/
+build/
+
+# Deployment helpers
+deploy-helper.ps1
+deploy-helper.sh
+deploy-render.ps1
+deploy-render.sh
+validate-vercel-config.js
+vercel.json

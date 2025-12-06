@@ -1,6 +1,6 @@
 const axios = require('axios');
 const { Op } = require('sequelize');
-const { FlightPrice } = require('../models');
+const { FlightPrice, ApiUsage } = require('../models');
 const config = require('../config');
 const flightScraperService = require('./flightScraperService');
 
@@ -10,8 +10,37 @@ class FlightService {
     this.betterFlightApiUrl = 'https://api.flightapi.io/onewaytrip';
     this.betterFlightApiKey = process.env.FLIGHTAPI_KEY || null;
     
-    // Traveloka-style search (via RapidAPI or direct)
+    // RapidAPI key for multiple services
     this.rapidApiKey = process.env.RAPIDAPI_KEY || null;
+    this.serpApiKey = process.env.SERPAPI_KEY || null;
+    
+    // Check if API keys are properly configured (not default values)
+    const isValidKey = (key) => key && key !== 'your-rapidapi-key' && key !== 'your-flightapi-key' && key !== 'your-serpapi-key';
+    
+    this.rapidApiKey = isValidKey(this.rapidApiKey) ? this.rapidApiKey : null;
+    this.serpApiKey = isValidKey(this.serpApiKey) ? this.serpApiKey : null;
+    this.betterFlightApiKey = isValidKey(this.betterFlightApiKey) ? this.betterFlightApiKey : null;
+    
+    // API rotation strategy: Try one API at a time, if it fails move to next
+    // Priority order based on reliability and free tier limits
+    this.apiProviders = [
+      { name: 'google-flights', enabled: !!this.rapidApiKey, method: 'fetchFromGoogleFlightsAPI' },
+      { name: 'agoda', enabled: !!this.rapidApiKey, method: 'fetchFromAgodaAPI' },
+      { name: 'serpapi', enabled: !!this.serpApiKey, method: 'fetchFromSerpAPI' },
+      { name: 'skyscanner', enabled: !!this.rapidApiKey, method: 'fetchFromSkyscannerAPI' },
+      { name: 'flightapi', enabled: !!this.betterFlightApiKey, method: 'fetchFromFlightAPI' }
+    ];
+    
+    // Log enabled APIs
+    const enabledApis = this.apiProviders.filter(p => p.enabled).map(p => p.name);
+    if (enabledApis.length > 0) {
+      console.log(`Enabled APIs: ${enabledApis.join(', ')}`);
+    } else {
+      console.log('⚠️  Warning: No flight APIs configured. Please set API keys in .env file.');
+    }
+    
+    // Track which API to use (rotates on failure)
+    this.currentApiIndex = 0;
   }
 
   /**
@@ -69,22 +98,9 @@ class FlightService {
         }
       }
 
-      // If still no data, try FlightAPI.io
-      if (flights.length === 0 && this.betterFlightApiKey) {
-        try {
-          flights = await this.fetchFromFlightAPI(fromAirport, toAirport, date);
-        } catch (err) {
-          console.log('FlightAPI.io failed:', err.message);
-        }
-      }
-
-      // If still no data, try Skyscanner-style API via RapidAPI
-      if (flights.length === 0 && this.rapidApiKey) {
-        try {
-          flights = await this.fetchFromSkyscannerAPI(fromAirport, toAirport, date);
-        } catch (err) {
-          console.log('Skyscanner API failed:', err.message);
-        }
+      // Use smart API rotation - try one API at a time
+      if (flights.length === 0) {
+        flights = await this.fetchFromAPIs(fromAirport, toAirport, date);
       }
 
       // Save to database if we got results
@@ -112,6 +128,220 @@ class FlightService {
       };
     } catch (error) {
       console.error('Flight search error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Track API usage
+   */
+  async trackApiUsage(apiProvider, success, rateLimited = false) {
+    try {
+      const now = new Date();
+      const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      const [usage, created] = await ApiUsage.findOrCreate({
+        where: { apiProvider, month },
+        defaults: {
+          callCount: 0,
+          successCount: 0,
+          failCount: 0,
+          rateLimitCount: 0
+        }
+      });
+
+      usage.callCount += 1;
+      if (success) {
+        usage.successCount += 1;
+      } else {
+        usage.failCount += 1;
+      }
+      if (rateLimited) {
+        usage.rateLimitCount += 1;
+      }
+      usage.lastCalledAt = now;
+      
+      await usage.save();
+    } catch (error) {
+      console.error('Error tracking API usage:', error.message);
+    }
+  }
+
+  /**
+   * Smart API rotation - tries one API at a time, rotates on failure
+   */
+  async fetchFromAPIs(fromAirport, toAirport, date) {
+    const enabledProviders = this.apiProviders.filter(p => p.enabled);
+    
+    if (enabledProviders.length === 0) {
+      console.log('No API providers configured');
+      return [];
+    }
+
+    // Try current API first
+    let attempts = 0;
+    const maxAttempts = enabledProviders.length;
+
+    while (attempts < maxAttempts) {
+      const provider = enabledProviders[this.currentApiIndex];
+      
+      try {
+        console.log(`Trying ${provider.name} API (attempt ${attempts + 1}/${maxAttempts})...`);
+        const flights = await this[provider.method](fromAirport, toAirport, date);
+        
+        if (flights.length > 0) {
+          console.log(`✓ ${provider.name} API returned ${flights.length} flights`);
+          await this.trackApiUsage(provider.name, true, false);
+          return flights;
+        }
+        
+        // No results means no flights available, not an error - stop trying other APIs
+        console.log(`${provider.name} API returned no results (no flights available for this route/date)`);
+        await this.trackApiUsage(provider.name, true, false);
+        return []; // Return empty array immediately, don't try other providers
+        
+      } catch (error) {
+        const isRateLimited = error.response?.status === 429 || 
+                             error.message?.includes('rate limit') ||
+                             error.message?.includes('quota');
+        
+        await this.trackApiUsage(provider.name, false, isRateLimited);
+        
+        if (isRateLimited) {
+          console.log(`✗ ${provider.name} API rate limited - rotating to next API`);
+          // Move to next API permanently when rate limited
+          this.currentApiIndex = (this.currentApiIndex + 1) % enabledProviders.length;
+        } else {
+          console.log(`✗ ${provider.name} API error: ${error.message} - trying next provider`);
+        }
+      }
+
+      // Move to next API for this request
+      this.currentApiIndex = (this.currentApiIndex + 1) % enabledProviders.length;
+      attempts++;
+      
+      // Small delay between API attempts
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.log('All API providers exhausted');
+    return [];
+  }
+
+  /**
+   * Fetch from SerpAPI (Google Flights scraper)
+   */
+  async fetchFromSerpAPI(fromAirport, toAirport, date) {
+    if (!this.serpApiKey) {
+      return [];
+    }
+
+    try {
+      const flightDate = new Date(date);
+      const dateStr = flightDate.toISOString().split('T')[0];
+      
+      const response = await axios.get('https://serpapi.com/search.json', {
+        params: {
+          engine: 'google_flights',
+          departure_id: fromAirport.toUpperCase(),
+          arrival_id: toAirport.toUpperCase(),
+          outbound_date: dateStr,
+          currency: 'VND',
+          hl: 'vi',
+          api_key: this.serpApiKey
+        },
+        timeout: 30000
+      });
+
+      const flights = [];
+      
+      if (response.data && response.data.best_flights) {
+        for (const flight of response.data.best_flights) {
+          const firstFlight = flight.flights?.[0];
+          if (firstFlight) {
+            flights.push({
+              fromAirport: fromAirport.toUpperCase(),
+              toAirport: toAirport.toUpperCase(),
+              date: flightDate,
+              airline: firstFlight.airline || 'Unknown',
+              flightNumber: firstFlight.flight_number || 'N/A',
+              departureTime: firstFlight.departure_airport?.time?.substring(11, 16) || '00:00',
+              arrivalTime: firstFlight.arrival_airport?.time?.substring(11, 16) || '00:00',
+              price: flight.price ? parseInt(flight.price) : 0,
+              currency: 'VND',
+              classType: 'economy',
+              seatsAvailable: 0,
+              source: 'serpapi',
+              fetchedAt: new Date()
+            });
+          }
+        }
+      }
+      
+      return flights;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch from Agoda via RapidAPI
+   */
+  async fetchFromAgodaAPI(fromAirport, toAirport, date) {
+    if (!this.rapidApiKey) {
+      return [];
+    }
+
+    try {
+      const flightDate = new Date(date);
+      const dateStr = flightDate.toISOString().split('T')[0];
+      
+      const response = await axios.get(
+        'https://agoda-com.p.rapidapi.com/flights/search-one-way',
+        {
+          params: {
+            origin: fromAirport.toUpperCase(),
+            destination: toAirport.toUpperCase(),
+            departureDate: dateStr,
+            adults: '1',
+            cabinClass: 'ECONOMY',
+            currency: 'VND'
+          },
+          headers: {
+            'X-RapidAPI-Key': this.rapidApiKey,
+            'X-RapidAPI-Host': 'agoda-com.p.rapidapi.com'
+          },
+          timeout: 30000
+        }
+      );
+
+      const flights = [];
+      
+      if (response.data && response.data.data && response.data.data.results) {
+        for (const result of response.data.data.results) {
+          const leg = result.legs?.[0];
+          if (leg) {
+            flights.push({
+              fromAirport: fromAirport.toUpperCase(),
+              toAirport: toAirport.toUpperCase(),
+              date: flightDate,
+              airline: leg.airline?.name || 'Unknown',
+              flightNumber: leg.flightNumber || 'N/A',
+              departureTime: leg.departure?.time?.substring(11, 16) || '00:00',
+              arrivalTime: leg.arrival?.time?.substring(11, 16) || '00:00',
+              price: result.price?.amount ? parseInt(result.price.amount) : 0,
+              currency: 'VND',
+              classType: 'economy',
+              seatsAvailable: 0,
+              source: 'agoda',
+              fetchedAt: new Date()
+            });
+          }
+        }
+      }
+      
+      return flights;
+    } catch (error) {
       throw error;
     }
   }
@@ -345,6 +575,73 @@ class FlightService {
       return flights;
     } catch (error) {
       console.log('FlightAPI.io error:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch from Google Flights via RapidAPI
+   */
+  async fetchFromGoogleFlightsAPI(fromAirport, toAirport, date) {
+    if (!this.rapidApiKey) {
+      return [];
+    }
+
+    try {
+      const flightDate = new Date(date);
+      const dateStr = flightDate.toISOString().split('T')[0];
+      
+      const response = await axios.get(
+        'https://google-flights2.p.rapidapi.com/api/v1/searchFlights',
+        {
+          params: {
+            departure_id: fromAirport.toUpperCase(),
+            arrival_id: toAirport.toUpperCase(),
+            outbound_date: dateStr,
+            travel_class: 'ECONOMY',
+            adults: '1',
+            show_hidden: '1',
+            currency: 'VND',
+            language_code: 'vi-VN',
+            country_code: 'VN',
+            search_type: 'best'
+          },
+          headers: {
+            'X-RapidAPI-Key': this.rapidApiKey,
+            'X-RapidAPI-Host': 'google-flights2.p.rapidapi.com'
+          },
+          timeout: 30000
+        }
+      );
+
+      const flights = [];
+      
+      if (response.data && response.data.data && response.data.data.flights) {
+        for (const flight of response.data.data.flights) {
+          const firstLeg = flight.legs?.[0];
+          if (firstLeg) {
+            flights.push({
+              fromAirport: fromAirport.toUpperCase(),
+              toAirport: toAirport.toUpperCase(),
+              date: flightDate,
+              airline: firstLeg.carriers?.[0]?.name || firstLeg.airline_name || 'Unknown',
+              flightNumber: firstLeg.flight_number || 'N/A',
+              departureTime: firstLeg.departure_time?.substring(11, 16) || '00:00',
+              arrivalTime: firstLeg.arrival_time?.substring(11, 16) || '00:00',
+              price: flight.price ? parseInt(flight.price) : 0,
+              currency: 'VND',
+              classType: 'economy',
+              seatsAvailable: 0,
+              source: 'google-flights',
+              fetchedAt: new Date()
+            });
+          }
+        }
+      }
+      
+      return flights;
+    } catch (error) {
+      console.log('Google Flights API error:', error.message);
       return [];
     }
   }

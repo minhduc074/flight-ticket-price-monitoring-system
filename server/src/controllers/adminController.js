@@ -1,5 +1,5 @@
 const { Op, fn, col, literal } = require('sequelize');
-const { User, Subscription, FlightPrice, NotificationHistory } = require('../models');
+const { User, Subscription, FlightPrice, NotificationHistory, ApiUsage } = require('../models');
 const { sequelize } = require('../config/database');
 
 /**
@@ -46,6 +46,14 @@ exports.getDashboard = async (req, res, next) => {
       limit: 10
     });
 
+    // API usage stats for current month
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const apiUsageStats = await ApiUsage.findAll({
+      where: { month: currentMonth },
+      order: [['callCount', 'DESC']]
+    });
+
     res.json({
       success: true,
       data: {
@@ -71,6 +79,14 @@ exports.getDashboard = async (req, res, next) => {
           currentPrice: s.currentPrice,
           isActive: s.isActive,
           createdAt: s.createdAt
+        })),
+        apiUsage: apiUsageStats.map(api => ({
+          provider: api.apiProvider,
+          calls: api.callCount,
+          success: api.successCount,
+          failed: api.failCount,
+          rateLimited: api.rateLimitCount,
+          lastCalled: api.lastCalledAt
         }))
       }
     });
@@ -321,6 +337,71 @@ exports.deleteSubscription = async (req, res, next) => {
     res.json({
       success: true,
       message: 'Subscription deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get API usage statistics
+ */
+exports.getApiUsage = async (req, res, next) => {
+  try {
+    const { months = 3 } = req.query;
+    
+    // Get usage for last N months
+    const now = new Date();
+    const monthsList = [];
+    for (let i = 0; i < parseInt(months); i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      monthsList.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    const apiUsageStats = await ApiUsage.findAll({
+      where: { month: { [Op.in]: monthsList } },
+      order: [['month', 'DESC'], ['callCount', 'DESC']]
+    });
+
+    // API limits configuration
+    const apiLimits = {
+      'google-flights': 150,
+      'agoda': 500,
+      'serpapi': 250,
+      'skyscanner': 500,
+      'flightapi': 100
+    };
+
+    // Group by month
+    const grouped = {};
+    for (const month of monthsList) {
+      grouped[month] = [];
+    }
+
+    for (const stat of apiUsageStats) {
+      if (grouped[stat.month]) {
+        grouped[stat.month].push({
+          provider: stat.apiProvider,
+          calls: stat.callCount,
+          limit: apiLimits[stat.apiProvider] || 0,
+          remaining: Math.max(0, (apiLimits[stat.apiProvider] || 0) - stat.callCount),
+          percentage: apiLimits[stat.apiProvider] 
+            ? Math.round((stat.callCount / apiLimits[stat.apiProvider]) * 100)
+            : 0,
+          success: stat.successCount,
+          failed: stat.failCount,
+          rateLimited: stat.rateLimitCount,
+          lastCalled: stat.lastCalledAt
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        apiLimits,
+        usage: grouped
+      }
     });
   } catch (error) {
     next(error);

@@ -2,31 +2,12 @@
 
 A complete system for monitoring Vietnam domestic flight ticket prices with automatic notifications when prices drop.
 
-## 🚀 Quick Deploy to Render.com
-
-**Ready to deploy?** See our comprehensive deployment documentation:
-
-- 📖 **[Render.com Deployment Guide](README_RENDER_DEPLOYMENT.md)** - Complete deployment instructions
-- 🎯 **[Database Name Guide](DATABASE_NAME_VISUAL_GUIDE.md)** - Is it random? (NO! You choose it!)
-- ✅ **[Deployment Checklist](DEPLOYMENT_CHECKLIST.md)** - Step-by-step checklist
-- ⚡ **[Quick Reference](QUICK_REFERENCE.md)** - Common commands and quick tips
-
 ### Quick Start Deployment
 ```bash
 # Run deployment helper
 .\deploy-render.ps1  # Windows
 ./deploy-render.sh   # Linux/Mac
 ```
-
-**Why Render.com?**
-- ✅ Simple PostgreSQL database setup
-- ✅ Built-in cron jobs for automated price checking
-- ✅ Free tier available (with limitations)
-- ✅ Easy environment variable management
-- ✅ Automatic HTTPS
-
-**Database Question**: The database name is **NOT random** - YOU choose it! See [Database Name Guide](DATABASE_NAME_VISUAL_GUIDE.md) for details.
-
 ---
 
 ## Architecture

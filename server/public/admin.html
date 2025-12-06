@@ -146,6 +146,160 @@
           </div>
         </div>
 
+        <!-- API Usage Tab -->
+        <div v-if="activeTab === 'api-usage'">
+          <div class="bg-white rounded-lg shadow mb-6">
+            <div class="p-4 border-b">
+              <h3 class="text-lg font-semibold">API Usage Monitor</h3>
+              <p class="text-sm text-gray-500">Track API calls and remaining quotas for current month</p>
+            </div>
+            
+            <div class="p-6">
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Google Flights -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-semibold text-gray-700">Google Flights</h4>
+                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">RapidAPI</span>
+                  </div>
+                  <div v-if="getApiStat('google-flights')">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{{ getApiStat('google-flights').calls }} / 150</span>
+                      <span :class="getApiStat('google-flights').percentage > 80 ? 'text-red-600' : 'text-green-600'">
+                        {{ getApiStat('google-flights').remaining }} left
+                      </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div class="bg-blue-600 h-2 rounded-full" 
+                           :style="{width: getApiStat('google-flights').percentage + '%'}"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 space-y-1">
+                      <div>✓ Success: {{ getApiStat('google-flights').success }}</div>
+                      <div>✗ Failed: {{ getApiStat('google-flights').failed }}</div>
+                      <div v-if="getApiStat('google-flights').rateLimited > 0" class="text-red-600">
+                        ⚠ Rate Limited: {{ getApiStat('google-flights').rateLimited }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-gray-400">No usage this month</div>
+                </div>
+
+                <!-- Agoda -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-semibold text-gray-700">Agoda</h4>
+                    <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">RapidAPI</span>
+                  </div>
+                  <div v-if="getApiStat('agoda')">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{{ getApiStat('agoda').calls }} / 500</span>
+                      <span :class="getApiStat('agoda').percentage > 80 ? 'text-red-600' : 'text-green-600'">
+                        {{ getApiStat('agoda').remaining }} left
+                      </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div class="bg-purple-600 h-2 rounded-full" 
+                           :style="{width: getApiStat('agoda').percentage + '%'}"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 space-y-1">
+                      <div>✓ Success: {{ getApiStat('agoda').success }}</div>
+                      <div>✗ Failed: {{ getApiStat('agoda').failed }}</div>
+                      <div v-if="getApiStat('agoda').rateLimited > 0" class="text-red-600">
+                        ⚠ Rate Limited: {{ getApiStat('agoda').rateLimited }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-gray-400">No usage this month</div>
+                </div>
+
+                <!-- SerpAPI -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-semibold text-gray-700">SerpAPI</h4>
+                    <span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Direct</span>
+                  </div>
+                  <div v-if="getApiStat('serpapi')">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{{ getApiStat('serpapi').calls }} / 250</span>
+                      <span :class="getApiStat('serpapi').percentage > 80 ? 'text-red-600' : 'text-green-600'">
+                        {{ getApiStat('serpapi').remaining }} left
+                      </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div class="bg-green-600 h-2 rounded-full" 
+                           :style="{width: getApiStat('serpapi').percentage + '%'}"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 space-y-1">
+                      <div>✓ Success: {{ getApiStat('serpapi').success }}</div>
+                      <div>✗ Failed: {{ getApiStat('serpapi').failed }}</div>
+                      <div v-if="getApiStat('serpapi').rateLimited > 0" class="text-red-600">
+                        ⚠ Rate Limited: {{ getApiStat('serpapi').rateLimited }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-gray-400">No usage this month</div>
+                </div>
+
+                <!-- Skyscanner -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-semibold text-gray-700">Skyscanner</h4>
+                    <span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">RapidAPI</span>
+                  </div>
+                  <div v-if="getApiStat('skyscanner')">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{{ getApiStat('skyscanner').calls }} / 500</span>
+                      <span :class="getApiStat('skyscanner').percentage > 80 ? 'text-red-600' : 'text-green-600'">
+                        {{ getApiStat('skyscanner').remaining }} left
+                      </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div class="bg-orange-600 h-2 rounded-full" 
+                           :style="{width: getApiStat('skyscanner').percentage + '%'}"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 space-y-1">
+                      <div>✓ Success: {{ getApiStat('skyscanner').success }}</div>
+                      <div>✗ Failed: {{ getApiStat('skyscanner').failed }}</div>
+                      <div v-if="getApiStat('skyscanner').rateLimited > 0" class="text-red-600">
+                        ⚠ Rate Limited: {{ getApiStat('skyscanner').rateLimited }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-gray-400">No usage this month</div>
+                </div>
+
+                <!-- FlightAPI -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-2">
+                    <h4 class="font-semibold text-gray-700">FlightAPI.io</h4>
+                    <span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">Direct</span>
+                  </div>
+                  <div v-if="getApiStat('flightapi')">
+                    <div class="flex justify-between text-sm mb-1">
+                      <span>{{ getApiStat('flightapi').calls }} / 100</span>
+                      <span :class="getApiStat('flightapi').percentage > 80 ? 'text-red-600' : 'text-green-600'">
+                        {{ getApiStat('flightapi').remaining }} left
+                      </span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mb-2">
+                      <div class="bg-yellow-600 h-2 rounded-full" 
+                           :style="{width: getApiStat('flightapi').percentage + '%'}"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 space-y-1">
+                      <div>✓ Success: {{ getApiStat('flightapi').success }}</div>
+                      <div>✗ Failed: {{ getApiStat('flightapi').failed }}</div>
+                      <div v-if="getApiStat('flightapi').rateLimited > 0" class="text-red-600">
+                        ⚠ Rate Limited: {{ getApiStat('flightapi').rateLimited }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-sm text-gray-400">No usage this month</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Users Tab -->
         <div v-if="activeTab === 'users'">
           <div class="bg-white rounded-lg shadow">
@@ -304,11 +458,13 @@
         const activeTab = ref('dashboard');
         const tabs = [
           { id: 'dashboard', name: 'Dashboard' },
+          { id: 'api-usage', name: 'API Usage' },
           { id: 'users', name: 'Người dùng' },
           { id: 'subscriptions', name: 'Đăng ký theo dõi' }
         ];
 
         const dashboard = ref({});
+        const apiUsage = ref({});
         const users = ref({ list: [], pagination: {} });
         const subscriptions = ref({ list: [], pagination: {} });
         const userSearch = ref('');
@@ -397,6 +553,23 @@
           } catch (error) {
             console.error('Failed to load dashboard:', error);
           }
+        };
+
+        const loadApiUsage = async () => {
+          try {
+            const data = await api('/admin/api-usage?months=1');
+            apiUsage.value = data.data;
+          } catch (error) {
+            console.error('Failed to load API usage:', error);
+          }
+        };
+
+        const getApiStat = (provider) => {
+          const now = new Date();
+          const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const monthData = apiUsage.value.usage?.[currentMonth];
+          if (!monthData) return null;
+          return monthData.find(api => api.provider === provider);
         };
 
         const loadUsers = async (page = 1) => {
@@ -497,6 +670,7 @@
 
         // Watch tab changes
         watch(activeTab, (newTab) => {
+          if (newTab === 'api-usage') loadApiUsage();
           if (newTab === 'users') loadUsers();
           if (newTab === 'subscriptions') loadSubscriptions();
         });
@@ -512,6 +686,7 @@
           activeTab,
           tabs,
           dashboard,
+          apiUsage,
           users,
           subscriptions,
           userSearch,
@@ -520,6 +695,8 @@
           logout,
           loadUsers,
           loadSubscriptions,
+          loadApiUsage,
+          getApiStat,
           toggleUserStatus,
           triggerPriceCheck,
           deleteSubscription,

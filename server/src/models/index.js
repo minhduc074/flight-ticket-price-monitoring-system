@@ -2,6 +2,7 @@ const User = require('./User');
 const Subscription = require('./Subscription');
 const FlightPrice = require('./FlightPrice');
 const NotificationHistory = require('./NotificationHistory');
+const ApiUsage = require('./ApiUsage');
 
 // Define associations
 User.hasMany(Subscription, { foreignKey: 'userId', as: 'subscriptions' });
@@ -14,5 +15,6 @@ module.exports = {
   User,
   Subscription,
   FlightPrice,
-  NotificationHistory
+  NotificationHistory,
+  ApiUsage
 };

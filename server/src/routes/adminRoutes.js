@@ -10,6 +10,9 @@ router.use(adminAuth);
 // Dashboard
 router.get('/dashboard', adminController.getDashboard);
 
+// API Usage
+router.get('/api-usage', adminController.getApiUsage);
+
 // Users
 router.get('/users', adminController.getUsers);
 router.put('/users/:id/status', adminController.updateUserStatus);

@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
-const { User } = require('../models');
+const { prisma } = require('../lib/prisma');
 const config = require('../config');
 
 /**
@@ -28,7 +29,9 @@ exports.register = async (req, res, next) => {
     const { email, password, name } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await prisma.user.findUnique({ 
+      where: { email } 
+    });
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -36,11 +39,17 @@ exports.register = async (req, res, next) => {
       });
     }
 
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     // Create new user
-    const user = await User.create({
-      email,
-      password,
-      name
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name
+      }
     });
 
     const token = generateToken(user.id);
@@ -79,7 +88,9 @@ exports.login = async (req, res, next) => {
     const { email, password } = req.body;
 
     // Find user
-    const user = await User.findOne({ where: { email } });
+    const user = await prisma.user.findUnique({ 
+      where: { email } 
+    });
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -96,7 +107,7 @@ exports.login = async (req, res, next) => {
     }
 
     // Verify password
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -159,7 +170,10 @@ exports.updateFcmToken = async (req, res, next) => {
       });
     }
 
-    await User.update({ fcmToken }, { where: { id: req.user.id } });
+    await prisma.user.update({ 
+      where: { id: req.user.id },
+      data: { fcmToken }
+    });
 
     res.json({
       success: true,
@@ -175,7 +189,10 @@ exports.updateFcmToken = async (req, res, next) => {
  */
 exports.logout = async (req, res, next) => {
   try {
-    await User.update({ fcmToken: null }, { where: { id: req.user.id } });
+    await prisma.user.update({ 
+      where: { id: req.user.id },
+      data: { fcmToken: null }
+    });
 
     res.json({
       success: true,
@@ -193,10 +210,14 @@ exports.updateProfile = async (req, res, next) => {
   try {
     const { name, currentPassword, newPassword } = req.body;
 
-    const user = await User.findByPk(req.user.id);
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    const updateData = {};
 
     if (name) {
-      user.name = name;
+      updateData.name = name;
     }
 
     if (newPassword) {
@@ -207,7 +228,7 @@ exports.updateProfile = async (req, res, next) => {
         });
       }
 
-      const isMatch = await user.comparePassword(currentPassword);
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isMatch) {
         return res.status(400).json({
           success: false,
@@ -215,20 +236,24 @@ exports.updateProfile = async (req, res, next) => {
         });
       }
 
-      user.password = newPassword;
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(newPassword, salt);
     }
 
-    await user.save();
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user.id },
+      data: updateData
+    });
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
       data: {
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
+          id: updatedUser.id,
+          email: updatedUser.email,
+          name: updatedUser.name,
+          role: updatedUser.role
         }
       }
     });

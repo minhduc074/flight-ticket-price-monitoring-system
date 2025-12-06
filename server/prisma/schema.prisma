@@ -1,0 +1,115 @@
+// Prisma schema for Fly Ticket Monitor
+// Using Prisma Postgres with Accelerate
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("PRISMA_DATABASE_URL")
+  directUrl = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum NotificationType {
+  price_drop
+  ticket_available
+  below_expected
+}
+
+enum ClassType {
+  economy
+  business
+  first
+}
+
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique @db.VarChar(255)
+  password      String         @db.VarChar(255)
+  name          String         @db.VarChar(255)
+  role          UserRole       @default(user)
+  fcmToken      String?        @db.Text
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now()) @db.Timestamptz
+  updatedAt     DateTime       @updatedAt @db.Timestamptz
+  subscriptions Subscription[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id                  String                @id @default(uuid()) @db.Uuid
+  userId              String                @db.Uuid
+  fromAirport         String                @db.VarChar(3)
+  toAirport           String                @db.VarChar(3)
+  date                DateTime              @db.Date
+  expectedPrice       Int
+  currentPrice        Int?
+  lastCheckedAt       DateTime?             @db.Timestamptz
+  isActive            Boolean               @default(true)
+  notificationSent    Boolean               @default(false)
+  createdAt           DateTime              @default(now()) @db.Timestamptz
+  updatedAt           DateTime              @updatedAt @db.Timestamptz
+  user                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationHistory NotificationHistory[]
+
+  @@index([userId, fromAirport, toAirport, date])
+  @@index([isActive, date])
+  @@map("subscriptions")
+}
+
+model NotificationHistory {
+  id             String           @id @default(uuid()) @db.Uuid
+  subscriptionId String           @db.Uuid
+  price          Int
+  type           NotificationType
+  sentAt         DateTime         @default(now()) @db.Timestamptz
+  subscription   Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@map("notification_history")
+}
+
+model ApiUsage {
+  id             Int       @id @default(autoincrement())
+  apiProvider    String    @db.VarChar(50)
+  month          String    @db.VarChar(7)
+  callCount      Int       @default(0)
+  successCount   Int       @default(0)
+  failCount      Int       @default(0)
+  rateLimitCount Int       @default(0)
+  lastCalledAt   DateTime? @db.Timestamptz
+  createdAt      DateTime  @default(now()) @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @db.Timestamptz
+
+  @@unique([apiProvider, month])
+  @@index([apiProvider, month])
+  @@map("api_usage")
+}
+
+model FlightPrice {
+  id            String    @id @default(uuid()) @db.Uuid
+  fromAirport   String    @db.VarChar(3)
+  toAirport     String    @db.VarChar(3)
+  date          DateTime  @db.Date
+  airline       String
+  flightNumber  String?
+  departureTime String?
+  arrivalTime   String?
+  price         Int
+  currency      String    @default("VND") @db.VarChar(3)
+  classType     ClassType @default(economy)
+  seatsAvailable Int?
+  source        String    @default("api")
+  fetchedAt     DateTime  @default(now()) @db.Timestamptz
+
+  @@index([fromAirport, toAirport, date])
+  @@index([fetchedAt])
+  @@map("flight_prices")
+}

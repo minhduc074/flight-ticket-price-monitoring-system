@@ -1,20 +1,8 @@
-const User = require('./User');
-const Subscription = require('./Subscription');
-const FlightPrice = require('./FlightPrice');
-const NotificationHistory = require('./NotificationHistory');
-const ApiUsage = require('./ApiUsage');
+// Export Prisma client and models
+// All database operations should use prisma client directly
+const { prisma } = require('../lib/prisma');
 
-// Define associations
-User.hasMany(Subscription, { foreignKey: 'userId', as: 'subscriptions' });
-Subscription.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
-Subscription.hasMany(NotificationHistory, { foreignKey: 'subscriptionId', as: 'notificationHistory' });
-NotificationHistory.belongsTo(Subscription, { foreignKey: 'subscriptionId', as: 'subscription' });
-
+// Export prisma client for direct usage
 module.exports = {
-  User,
-  Subscription,
-  FlightPrice,
-  NotificationHistory,
-  ApiUsage
+  prisma
 };

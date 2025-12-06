@@ -4,14 +4,10 @@ module.exports = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   
+  // Database URL for Prisma (set in .env as DATABASE_URL)
   database: {
-    // Support both Vercel Postgres and traditional connection
-    url: process.env.POSTGRES_URL || process.env.DATABASE_URL,
-    host: process.env.POSTGRES_HOST || process.env.DB_HOST || 'localhost',
-    port: process.env.POSTGRES_PORT || process.env.DB_PORT || 5432,
-    name: process.env.POSTGRES_DATABASE || process.env.DB_NAME || 'fly_ticket_noti',
-    user: process.env.POSTGRES_USER || process.env.DB_USER || 'postgres',
-    password: process.env.POSTGRES_PASSWORD || process.env.DB_PASSWORD || 'postgres'
+    url: process.env.DATABASE_URL,
+    directUrl: process.env.DIRECT_URL
   },
   
   jwt: {

@@ -1,6 +1,5 @@
 const axios = require('axios');
-const { Op } = require('sequelize');
-const { FlightPrice, ApiUsage } = require('../models');
+const { prisma } = require('../lib/prisma');
 const config = require('../config');
 const flightScraperService = require('./flightScraperService');
 
@@ -56,16 +55,17 @@ class FlightService {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
-      const cachedFlights = await FlightPrice.findAll({
+      const cachedFlights = await prisma.flightPrice.findMany({
         where: {
           fromAirport: fromAirport.toUpperCase(),
           toAirport: toAirport.toUpperCase(),
           date: {
-            [Op.between]: [startOfDay, endOfDay]
+            gte: startOfDay,
+            lte: endOfDay
           },
-          fetchedAt: { [Op.gte]: fiveMinutesAgo }
+          fetchedAt: { gte: fiveMinutesAgo }
         },
-        order: [['price', 'ASC']]
+        orderBy: { price: 'asc' }
       });
 
       if (cachedFlights.length > 0) {
@@ -83,17 +83,20 @@ class FlightService {
 
       // Save to database if we got results
       if (flights.length > 0) {
-        await FlightPrice.destroy({
+        await prisma.flightPrice.deleteMany({
           where: {
             fromAirport: fromAirport.toUpperCase(),
             toAirport: toAirport.toUpperCase(),
             date: {
-              [Op.between]: [startOfDay, endOfDay]
+              gte: startOfDay,
+              lte: endOfDay
             }
           }
         });
         
-        await FlightPrice.bulkCreate(flights);
+        await prisma.flightPrice.createMany({
+          data: flights
+        });
         console.log(`Saved ${flights.length} flights to database`);
       } else {
         console.log(`No flights found for ${fromAirport}-${toAirport}`);
@@ -118,28 +121,38 @@ class FlightService {
       const now = new Date();
       const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       
-      const [usage, created] = await ApiUsage.findOrCreate({
-        where: { apiProvider, month },
-        defaults: {
-          callCount: 0,
-          successCount: 0,
-          failCount: 0,
-          rateLimitCount: 0
+      const existingUsage = await prisma.apiUsage.findUnique({
+        where: {
+          apiProvider_month: { apiProvider, month }
         }
       });
 
-      usage.callCount += 1;
-      if (success) {
-        usage.successCount += 1;
+      if (existingUsage) {
+        await prisma.apiUsage.update({
+          where: {
+            apiProvider_month: { apiProvider, month }
+          },
+          data: {
+            callCount: { increment: 1 },
+            successCount: success ? { increment: 1 } : undefined,
+            failCount: !success ? { increment: 1 } : undefined,
+            rateLimitCount: rateLimited ? { increment: 1 } : undefined,
+            lastCalledAt: now
+          }
+        });
       } else {
-        usage.failCount += 1;
+        await prisma.apiUsage.create({
+          data: {
+            apiProvider,
+            month,
+            callCount: 1,
+            successCount: success ? 1 : 0,
+            failCount: !success ? 1 : 0,
+            rateLimitCount: rateLimited ? 1 : 0,
+            lastCalledAt: now
+          }
+        });
       }
-      if (rateLimited) {
-        usage.rateLimitCount += 1;
-      }
-      usage.lastCalledAt = now;
-      
-      await usage.save();
     } catch (error) {
       console.error('Error tracking API usage:', error.message);
     }

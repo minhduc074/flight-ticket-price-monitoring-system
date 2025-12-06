@@ -1,20 +1,22 @@
 require('dotenv').config();
-const { sequelize } = require('./database');
-require('../models'); // Load models and associations
+const { prisma, connectDB, disconnectDB } = require('../lib/prisma');
 
 const syncDatabase = async () => {
   try {
-    console.log('Connecting to PostgreSQL...');
-    await sequelize.authenticate();
+    console.log('Connecting to PostgreSQL via Prisma...');
+    await connectDB();
     console.log('Connection established successfully.');
 
-    console.log('Syncing database schema...');
-    await sequelize.sync({ alter: true });
-    console.log('Database schema synchronized successfully.');
+    console.log('\nTo sync database schema, run:');
+    console.log('  npx prisma db push     - Push schema to database');
+    console.log('  npx prisma migrate dev - Create migration');
+    console.log('  npx prisma generate    - Generate Prisma Client');
+    console.log('  npx prisma studio      - Open Prisma Studio GUI');
 
+    await disconnectDB();
     process.exit(0);
   } catch (error) {
-    console.error('Error syncing database:', error);
+    console.error('Error connecting to database:', error);
     process.exit(1);
   }
 };

@@ -1,6 +1,4 @@
-const { Op, fn, col, literal } = require('sequelize');
-const { User, Subscription, FlightPrice, NotificationHistory, ApiUsage } = require('../models');
-const { sequelize } = require('../config/database');
+const { prisma } = require('../lib/prisma');
 
 /**
  * Get dashboard statistics
@@ -14,44 +12,39 @@ exports.getDashboard = async (req, res, next) => {
       activeSubscriptions,
       notificationsSent
     ] = await Promise.all([
-      User.count({ where: { role: 'user' } }),
-      User.count({ where: { role: 'user', isActive: true } }),
-      Subscription.count(),
-      Subscription.count({ where: { isActive: true } }),
-      NotificationHistory.count()
+      prisma.user.count({ where: { role: 'user' } }),
+      prisma.user.count({ where: { role: 'user', isActive: true } }),
+      prisma.subscription.count(),
+      prisma.subscription.count({ where: { isActive: true } }),
+      prisma.notificationHistory.count()
     ]);
 
     // Get subscriptions by route
-    const topRoutes = await Subscription.findAll({
+    const topRoutes = await prisma.subscription.groupBy({
+      by: ['fromAirport', 'toAirport'],
       where: { isActive: true },
-      attributes: [
-        'fromAirport',
-        'toAirport',
-        [fn('COUNT', col('id')), 'count']
-      ],
-      group: ['fromAirport', 'toAirport'],
-      order: [[literal('count'), 'DESC']],
-      limit: 10,
-      raw: true
+      _count: { id: true },
+      orderBy: { _count: { id: 'desc' } },
+      take: 10
     });
 
     // Recent activity
-    const recentSubscriptions = await Subscription.findAll({
-      include: [{
-        model: User,
-        as: 'user',
-        attributes: ['email', 'name']
-      }],
-      order: [['createdAt', 'DESC']],
-      limit: 10
+    const recentSubscriptions = await prisma.subscription.findMany({
+      include: {
+        user: {
+          select: { email: true, name: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10
     });
 
     // API usage stats for current month
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const apiUsageStats = await ApiUsage.findAll({
+    const apiUsageStats = await prisma.apiUsage.findMany({
       where: { month: currentMonth },
-      order: [['callCount', 'DESC']]
+      orderBy: { callCount: 'desc' }
     });
 
     res.json({
@@ -67,7 +60,7 @@ exports.getDashboard = async (req, res, next) => {
         topRoutes: topRoutes.map(r => ({
           from: r.fromAirport,
           to: r.toAirport,
-          count: parseInt(r.count)
+          count: r._count.id
         })),
         recentSubscriptions: recentSubscriptions.map(s => ({
           id: s.id,
@@ -104,38 +97,33 @@ exports.getUsers = async (req, res, next) => {
 
     const where = { role: 'user' };
     if (search) {
-      where[Op.or] = [
-        { email: { [Op.iLike]: `%${search}%` } },
-        { name: { [Op.iLike]: `%${search}%` } }
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } }
       ];
     }
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    const { count: total, rows: users } = await User.findAndCountAll({
-      where,
-      attributes: { exclude: ['password'] },
-      order: [['createdAt', 'DESC']],
-      offset,
-      limit: parseInt(limit)
-    });
-
-    // Get subscription counts for each user
-    const userIds = users.map(u => u.id);
-    const subscriptionCounts = await Subscription.findAll({
-      where: { userId: { [Op.in]: userIds } },
-      attributes: [
-        'userId',
-        [fn('COUNT', col('id')), 'count']
-      ],
-      group: ['userId'],
-      raw: true
-    });
-
-    const countMap = subscriptionCounts.reduce((acc, item) => {
-      acc[item.userId] = parseInt(item.count);
-      return acc;
-    }, {});
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          isActive: true,
+          createdAt: true,
+          _count: {
+            select: { subscriptions: true }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: parseInt(limit)
+      })
+    ]);
 
     res.json({
       success: true,
@@ -145,7 +133,7 @@ exports.getUsers = async (req, res, next) => {
           email: u.email,
           name: u.name,
           isActive: u.isActive,
-          subscriptionCount: countMap[u.id] || 0,
+          subscriptionCount: u._count.subscriptions,
           createdAt: u.createdAt
         })),
         pagination: {
@@ -169,7 +157,9 @@ exports.updateUserStatus = async (req, res, next) => {
     const { id } = req.params;
     const { isActive } = req.body;
 
-    const user = await User.findByPk(id);
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
 
     if (!user) {
       return res.status(404).json({
@@ -185,8 +175,10 @@ exports.updateUserStatus = async (req, res, next) => {
       });
     }
 
-    user.isActive = isActive;
-    await user.save();
+    await prisma.user.update({
+      where: { id },
+      data: { isActive }
+    });
 
     res.json({
       success: true,
@@ -217,23 +209,21 @@ exports.getAllSubscriptions = async (req, res, next) => {
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    const { count: total, rows: subscriptions } = await Subscription.findAndCountAll({
-      where,
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'email', 'name']
+    const [total, subscriptions] = await Promise.all([
+      prisma.subscription.count({ where }),
+      prisma.subscription.findMany({
+        where,
+        include: {
+          user: {
+            select: { id: true, email: true, name: true }
+          },
+          notificationHistory: true
         },
-        {
-          model: NotificationHistory,
-          as: 'notificationHistory'
-        }
-      ],
-      order: [['createdAt', 'DESC']],
-      offset,
-      limit: parseInt(limit)
-    });
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: parseInt(limit)
+      })
+    ]);
 
     res.json({
       success: true,
@@ -276,26 +266,49 @@ exports.getFlightPriceHistory = async (req, res, next) => {
     startDate.setDate(startDate.getDate() - parseInt(days));
 
     const where = {
-      fetchedAt: { [Op.between]: [startDate, endDate] }
+      fetchedAt: { gte: startDate, lte: endDate }
     };
     if (from) where.fromAirport = from.toUpperCase();
     if (to) where.toAirport = to.toUpperCase();
 
-    const prices = await FlightPrice.findAll({
+    // Get flight prices with grouping logic handled in JS
+    const flightPrices = await prisma.flightPrice.findMany({
       where,
-      attributes: [
-        [fn('DATE', col('fetchedAt')), 'date'],
-        'fromAirport',
-        'toAirport',
-        [fn('AVG', col('price')), 'avgPrice'],
-        [fn('MIN', col('price')), 'minPrice'],
-        [fn('MAX', col('price')), 'maxPrice'],
-        [fn('COUNT', col('id')), 'count']
-      ],
-      group: [fn('DATE', col('fetchedAt')), 'fromAirport', 'toAirport'],
-      order: [[fn('DATE', col('fetchedAt')), 'ASC']],
-      raw: true
+      select: {
+        fetchedAt: true,
+        fromAirport: true,
+        toAirport: true,
+        price: true
+      }
     });
+
+    // Group by date and route
+    const grouped = {};
+    for (const fp of flightPrices) {
+      const dateKey = fp.fetchedAt.toISOString().split('T')[0];
+      const key = `${dateKey}-${fp.fromAirport}-${fp.toAirport}`;
+      
+      if (!grouped[key]) {
+        grouped[key] = {
+          date: dateKey,
+          fromAirport: fp.fromAirport,
+          toAirport: fp.toAirport,
+          prices: []
+        };
+      }
+      grouped[key].prices.push(fp.price);
+    }
+
+    // Calculate aggregates
+    const prices = Object.values(grouped).map(g => ({
+      date: g.date,
+      fromAirport: g.fromAirport,
+      toAirport: g.toAirport,
+      avgPrice: Math.round(g.prices.reduce((a, b) => a + b, 0) / g.prices.length),
+      minPrice: Math.min(...g.prices),
+      maxPrice: Math.max(...g.prices),
+      count: g.prices.length
+    })).sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
       success: true,
@@ -304,10 +317,10 @@ exports.getFlightPriceHistory = async (req, res, next) => {
           date: p.date,
           from: p.fromAirport,
           to: p.toAirport,
-          avgPrice: Math.round(parseFloat(p.avgPrice)),
-          minPrice: parseInt(p.minPrice),
-          maxPrice: parseInt(p.maxPrice),
-          sampleCount: parseInt(p.count)
+          avgPrice: p.avgPrice,
+          minPrice: p.minPrice,
+          maxPrice: p.maxPrice,
+          sampleCount: p.count
         }))
       }
     });
@@ -323,7 +336,9 @@ exports.deleteSubscription = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const subscription = await Subscription.findByPk(id);
+    const subscription = await prisma.subscription.findUnique({
+      where: { id }
+    });
 
     if (!subscription) {
       return res.status(404).json({
@@ -332,7 +347,9 @@ exports.deleteSubscription = async (req, res, next) => {
       });
     }
 
-    await subscription.destroy();
+    await prisma.subscription.delete({
+      where: { id }
+    });
 
     res.json({
       success: true,
@@ -358,9 +375,9 @@ exports.getApiUsage = async (req, res, next) => {
       monthsList.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    const apiUsageStats = await ApiUsage.findAll({
-      where: { month: { [Op.in]: monthsList } },
-      order: [['month', 'DESC'], ['callCount', 'DESC']]
+    const apiUsageStats = await prisma.apiUsage.findMany({
+      where: { month: { in: monthsList } },
+      orderBy: [{ month: 'desc' }, { callCount: 'desc' }]
     });
 
     // API limits configuration
@@ -428,18 +445,15 @@ exports.triggerPriceCheck = async (req, res, next) => {
 };
 
 /**
- * Sync database models (for initial deployment)
+ * Sync database models (for initial deployment - uses Prisma db push)
  */
 exports.syncDatabase = async (req, res, next) => {
   try {
-    const { force = false } = req.query;
-    
-    // Sync database models
-    await sequelize.sync({ alter: !force, force: force === 'true' });
-    
+    // With Prisma, schema sync is done via CLI (prisma db push)
+    // This endpoint is kept for API compatibility
     res.json({
       success: true,
-      message: `Database models synced successfully (force: ${force})`
+      message: 'Database schema is managed via Prisma. Run `npx prisma db push` to sync.'
     });
   } catch (error) {
     next(error);

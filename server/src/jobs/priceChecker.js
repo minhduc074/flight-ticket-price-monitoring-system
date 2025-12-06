@@ -1,6 +1,5 @@
 const cron = require('node-cron');
-const { Op } = require('sequelize');
-const { Subscription, User, NotificationHistory } = require('../models');
+const { prisma } = require('../lib/prisma');
 const { flightService, notificationService } = require('../services');
 
 /**
@@ -14,15 +13,14 @@ const checkPrices = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const subscriptions = await Subscription.findAll({
+    const subscriptions = await prisma.subscription.findMany({
       where: {
         isActive: true,
-        date: { [Op.gte]: today }
+        date: { gte: today }
       },
-      include: [{
-        model: User,
-        as: 'user'
-      }]
+      include: {
+        user: true
+      }
     });
 
     console.log(`Found ${subscriptions.length} active subscriptions to check`);
@@ -88,9 +86,11 @@ const processSubscription = async (subscription, currentPrice) => {
     const previousPrice = subscription.currentPrice;
     const user = subscription.user;
 
-    // Update subscription with current price
-    subscription.currentPrice = currentPrice;
-    subscription.lastCheckedAt = new Date();
+    // Prepare update data
+    const updateData = {
+      currentPrice,
+      lastCheckedAt: new Date()
+    };
 
     let notificationSent = false;
     let notificationType = null;
@@ -136,7 +136,7 @@ const processSubscription = async (subscription, currentPrice) => {
           currentPrice
         );
         if (result.success) {
-          subscription.notificationSent = true;
+          updateData.notificationSent = true;
           notificationSent = true;
           notificationType = 'below_expected';
         }
@@ -145,15 +145,21 @@ const processSubscription = async (subscription, currentPrice) => {
 
     // Record notification in history
     if (notificationSent && notificationType) {
-      await NotificationHistory.create({
-        subscriptionId: subscription.id,
-        price: currentPrice,
-        sentAt: new Date(),
-        type: notificationType
+      await prisma.notificationHistory.create({
+        data: {
+          subscriptionId: subscription.id,
+          price: currentPrice,
+          sentAt: new Date(),
+          type: notificationType
+        }
       });
     }
 
-    await subscription.save();
+    // Update subscription
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: updateData
+    });
 
     if (notificationSent) {
       console.log(`Notification sent to ${user.email} for ${subscription.fromAirport}->${subscription.toAirport}: ${notificationType}`);

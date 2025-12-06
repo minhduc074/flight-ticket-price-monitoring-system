@@ -1,5 +1,4 @@
-const { Op } = require('sequelize');
-const { Subscription, NotificationHistory } = require('../models');
+const { prisma } = require('../lib/prisma');
 const { flightService } = require('../services');
 const config = require('../config');
 
@@ -57,13 +56,14 @@ exports.createSubscription = async (req, res, next) => {
     const endOfDay = new Date(flightDate);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const existingSubscription = await Subscription.findOne({
+    const existingSubscription = await prisma.subscription.findFirst({
       where: {
         userId: req.user.id,
         fromAirport: fromAirport.toUpperCase(),
         toAirport: toAirport.toUpperCase(),
         date: {
-          [Op.between]: [startOfDay, endOfDay]
+          gte: startOfDay,
+          lte: endOfDay
         },
         isActive: true
       }
@@ -83,14 +83,16 @@ exports.createSubscription = async (req, res, next) => {
       date
     );
 
-    const subscription = await Subscription.create({
-      userId: req.user.id,
-      fromAirport: fromAirport.toUpperCase(),
-      toAirport: toAirport.toUpperCase(),
-      date: new Date(date),
-      expectedPrice,
-      currentPrice,
-      lastCheckedAt: currentPrice ? new Date() : null
+    const subscription = await prisma.subscription.create({
+      data: {
+        userId: req.user.id,
+        fromAirport: fromAirport.toUpperCase(),
+        toAirport: toAirport.toUpperCase(),
+        date: new Date(date),
+        expectedPrice,
+        currentPrice,
+        lastCheckedAt: currentPrice ? new Date() : null
+      }
     });
 
     res.status(201).json({
@@ -125,9 +127,9 @@ exports.getSubscriptions = async (req, res, next) => {
       where.isActive = active === 'true';
     }
 
-    const subscriptions = await Subscription.findAll({
+    const subscriptions = await prisma.subscription.findMany({
       where,
-      order: [['createdAt', 'DESC']]
+      orderBy: { createdAt: 'desc' }
     });
 
     const airports = config.airports;
@@ -167,16 +169,16 @@ exports.getSubscription = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const subscription = await Subscription.findOne({
+    const subscription = await prisma.subscription.findFirst({
       where: {
         id,
         userId: req.user.id
       },
-      include: [{
-        model: NotificationHistory,
-        as: 'notificationHistory',
-        order: [['sentAt', 'DESC']]
-      }]
+      include: {
+        notificationHistory: {
+          orderBy: { sentAt: 'desc' }
+        }
+      }
     });
 
     if (!subscription) {
@@ -225,7 +227,7 @@ exports.updateSubscription = async (req, res, next) => {
     const { id } = req.params;
     const { expectedPrice, isActive } = req.body;
 
-    const subscription = await Subscription.findOne({
+    const subscription = await prisma.subscription.findFirst({
       where: {
         id,
         userId: req.user.id
@@ -239,6 +241,8 @@ exports.updateSubscription = async (req, res, next) => {
       });
     }
 
+    const updateData = {};
+
     if (expectedPrice !== undefined) {
       if (expectedPrice <= 0) {
         return res.status(400).json({
@@ -246,28 +250,31 @@ exports.updateSubscription = async (req, res, next) => {
           message: 'Expected price must be a positive number'
         });
       }
-      subscription.expectedPrice = expectedPrice;
-      subscription.notificationSent = false; // Reset notification flag when price changes
+      updateData.expectedPrice = expectedPrice;
+      updateData.notificationSent = false; // Reset notification flag when price changes
     }
 
     if (isActive !== undefined) {
-      subscription.isActive = isActive;
+      updateData.isActive = isActive;
     }
 
-    await subscription.save();
+    const updatedSubscription = await prisma.subscription.update({
+      where: { id },
+      data: updateData
+    });
 
     res.json({
       success: true,
       message: 'Subscription updated successfully',
       data: {
         subscription: {
-          id: subscription.id,
-          fromAirport: subscription.fromAirport,
-          toAirport: subscription.toAirport,
-          date: subscription.date,
-          expectedPrice: subscription.expectedPrice,
-          currentPrice: subscription.currentPrice,
-          isActive: subscription.isActive
+          id: updatedSubscription.id,
+          fromAirport: updatedSubscription.fromAirport,
+          toAirport: updatedSubscription.toAirport,
+          date: updatedSubscription.date,
+          expectedPrice: updatedSubscription.expectedPrice,
+          currentPrice: updatedSubscription.currentPrice,
+          isActive: updatedSubscription.isActive
         }
       }
     });
@@ -283,19 +290,23 @@ exports.deleteSubscription = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const deleted = await Subscription.destroy({
+    const subscription = await prisma.subscription.findFirst({
       where: {
         id,
         userId: req.user.id
       }
     });
 
-    if (!deleted) {
+    if (!subscription) {
       return res.status(404).json({
         success: false,
         message: 'Subscription not found'
       });
     }
+
+    await prisma.subscription.delete({
+      where: { id }
+    });
 
     res.json({
       success: true,

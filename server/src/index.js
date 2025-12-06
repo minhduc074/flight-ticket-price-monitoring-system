@@ -2,14 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 
 const config = require('./config');
-const { sequelize } = require('./config/database');
+const { prisma, connectDB } = require('./lib/prisma');
 const { initializeFirebase } = require('./config/firebase');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware');
 const { startPriceCheckerJob } = require('./jobs');
-const { User } = require('./models');
 
 const app = express();
 
@@ -40,14 +40,21 @@ app.use(errorHandler);
 // Create default admin if not exists
 const createDefaultAdmin = async () => {
   try {
-    const adminExists = await User.findOne({ where: { role: 'admin' } });
+    const adminExists = await prisma.user.findFirst({ 
+      where: { role: 'admin' } 
+    });
     
     if (!adminExists) {
-      await User.create({
-        email: config.admin.email,
-        password: config.admin.password,
-        name: 'Admin',
-        role: 'admin'
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(config.admin.password, salt);
+      
+      await prisma.user.create({
+        data: {
+          email: config.admin.email,
+          password: hashedPassword,
+          name: 'Admin',
+          role: 'admin'
+        }
       });
       console.log(`Default admin created: ${config.admin.email}`);
     }
@@ -59,13 +66,8 @@ const createDefaultAdmin = async () => {
 // Start server
 const startServer = async () => {
   try {
-    // Connect to PostgreSQL and sync models
-    await sequelize.authenticate();
-    console.log('PostgreSQL connected successfully');
-    
-    // Sync database models (creates tables if they don't exist)
-    await sequelize.sync({ alter: false });
-    console.log('Database models synced');
+    // Connect to PostgreSQL via Prisma
+    await connectDB();
     
     // Initialize Firebase
     initializeFirebase();

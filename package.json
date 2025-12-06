@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "install-server": "cd server && npm install",
-    "build": "cd server && npm install && npx prisma generate",
-    "vercel-build": "cd server && npm install && npx prisma generate"
+    "build": "npm install && npx prisma generate",
+    "vercel-build": "npm install && npx prisma generate"
   },
   "workspaces": [
     "server"

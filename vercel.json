@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd server && npm install && npx prisma generate",
+  "buildCommand": "npm install && npx prisma generate",
   "installCommand": "npm install",
   "framework": null,
   "rewrites": [

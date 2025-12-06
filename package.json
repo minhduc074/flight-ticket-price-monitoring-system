@@ -3,12 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "install-server": "npm install --workspace=server",
-    "build": "npm install --workspace=server && npm run prisma:generate --workspace=server",
-    "vercel-build": "npm install --workspace=server && npx prisma generate --schema=server/prisma/schema.prisma"
+    "install-server": "cd server && npm install",
+    "build": "cd server && npm install && npx prisma generate",
+    "vercel-build": "cd server && npm install && npx prisma generate"
   },
   "workspaces": [
     "server"
-  ],
-  "dependencies": {}
+  ]
 }

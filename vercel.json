@@ -27,11 +27,5 @@
   ],
   "env": {
     "NODE_ENV": "production"
-  },
-  "crons": [
-    {
-      "path": "/api/admin/trigger-price-check",
-      "schedule": "0 */6 * * *"
-    }
-  ]
+  }
 }

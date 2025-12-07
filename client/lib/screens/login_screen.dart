@@ -46,6 +46,18 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.settings),
+            onPressed: () {
+              Navigator.pushNamed(context, '/settings');
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -67,7 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Title
                 Text(
                   'Đăng nhập',
-                  textAlign: TextAlign.center,
+  textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -75,22 +87,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 8),
                 Text(
                   'Theo dõi giá vé máy bay Việt Nam',
-                  textAlign: TextAlign.center,
+  textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Colors.grey[600],
                   ),
                 ),
                 const SizedBox(height: 48),
-
-                // Email
+    
+                //     Email
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     labelText: 'Email',
                     prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  validator: (value) {
+                  ),    
+                      validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Vui lòng nhập email';
                     }

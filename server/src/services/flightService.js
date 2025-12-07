@@ -186,10 +186,9 @@ class FlightService {
           return flights;
         }
         
-        // No results means no flights available, not an error - stop trying other APIs
-        console.log(`${provider.name} API returned no results (no flights available for this route/date)`);
+        // No results from this provider - try next one
+        console.log(`${provider.name} API returned no results - trying next provider`);
         await this.trackApiUsage(provider.name, true, false);
-        return []; // Return empty array immediately, don't try other providers
         
       } catch (error) {
         const isRateLimited = error.response?.status === 429 || 

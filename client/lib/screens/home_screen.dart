@@ -72,6 +72,12 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text('Fly Ticket Monitor'),
         actions: [
           IconButton(
+            icon: Icon(Icons.settings),
+            onPressed: () {
+              Navigator.pushNamed(context, '/settings');
+            },
+          ),
+          IconButton(
             icon: Icon(Icons.logout),
             onPressed: _logout,
           ),

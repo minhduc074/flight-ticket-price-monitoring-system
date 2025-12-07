@@ -18,9 +18,17 @@ class ApiService {
   ApiService._internal();
 
   String? _authToken;
+  String? _cachedServerUrl;
 
   void setAuthToken(String? token) {
     _authToken = token;
+  }
+
+  Future<String> get _baseUrl async {
+    if (_cachedServerUrl == null) {
+      _cachedServerUrl = await AppConfig.getServerUrl();
+    }
+    return _cachedServerUrl!;
   }
 
   Map<String, String> get _headers {
@@ -35,9 +43,10 @@ class ApiService {
 
   Future<Map<String, dynamic>> get(String endpoint) async {
     try {
+      final baseUrl = await _baseUrl;
       final response = await http
           .get(
-            Uri.parse('${AppConfig.baseUrl}$endpoint'),
+            Uri.parse('$baseUrl$endpoint'),
             headers: _headers,
           )
           .timeout(AppConfig.connectionTimeout);
@@ -53,9 +62,10 @@ class ApiService {
     Map<String, dynamic>? body,
   }) async {
     try {
+      final baseUrl = await _baseUrl;
       final response = await http
           .post(
-            Uri.parse('${AppConfig.baseUrl}$endpoint'),
+            Uri.parse('$baseUrl$endpoint'),
             headers: _headers,
             body: body != null ? jsonEncode(body) : null,
           )
@@ -72,9 +82,10 @@ class ApiService {
     Map<String, dynamic>? body,
   }) async {
     try {
+      final baseUrl = await _baseUrl;
       final response = await http
           .put(
-            Uri.parse('${AppConfig.baseUrl}$endpoint'),
+            Uri.parse('$baseUrl$endpoint'),
             headers: _headers,
             body: body != null ? jsonEncode(body) : null,
           )
@@ -88,9 +99,10 @@ class ApiService {
 
   Future<Map<String, dynamic>> delete(String endpoint) async {
     try {
+      final baseUrl = await _baseUrl;
       final response = await http
           .delete(
-            Uri.parse('${AppConfig.baseUrl}$endpoint'),
+            Uri.parse('$baseUrl$endpoint'),
             headers: _headers,
           )
           .timeout(AppConfig.connectionTimeout);

@@ -13,6 +13,7 @@ import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_flights_screen.dart';
 import 'screens/subscription_detail_screen.dart';
+import 'screens/settings_screen.dart';
 
 // Background message handler
 @pragma('vm:entry-point')
@@ -23,19 +24,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize date formatting for intl package
   await initializeDateFormatting();
-  
+
   // Initialize Firebase
   await Firebase.initializeApp();
-  
+
   // Set up background message handler
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-  
+
   // Initialize notification service
   await NotificationService.instance.initialize();
-  
+
   runApp(const MyApp());
 }
 
@@ -102,6 +103,7 @@ class MyApp extends StatelessWidget {
           '/register': (context) => const RegisterScreen(),
           '/home': (context) => const HomeScreen(),
           '/search-flights': (context) => const SearchFlightsScreen(),
+          '/settings': (context) => const SettingsScreen(),
         },
         onGenerateRoute: (settings) {
           if (settings.name == '/subscription-detail') {

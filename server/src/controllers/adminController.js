@@ -459,3 +459,120 @@ exports.syncDatabase = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Get API logs
+ */
+exports.getApiLogs = async (req, res, next) => {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const logDir = path.join(__dirname, '../../logs');
+    
+    // Get all log files
+    const files = await fs.readdir(logDir);
+    const logFiles = files.filter(f => f.endsWith('.log'));
+    
+    // Get stats for each file
+    const logsInfo = await Promise.all(
+      logFiles.map(async (file) => {
+        const filePath = path.join(logDir, file);
+        const stats = await fs.stat(filePath);
+        const [apiName, date] = file.replace('.log', '').split('_');
+        
+        return {
+          apiName,
+          date,
+          filename: file,
+          size: stats.size,
+          modified: stats.mtime
+        };
+      })
+    );
+    
+    // Sort by modified date descending
+    logsInfo.sort((a, b) => b.modified - a.modified);
+    
+    res.json({
+      success: true,
+      logs: logsInfo
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get API logs by name
+ */
+exports.getApiLogsByName = async (req, res, next) => {
+  try {
+    const { apiName } = req.params;
+    const { date, limit = 100 } = req.query;
+    
+    const fs = require('fs').promises;
+    const path = require('path');
+    const logDir = path.join(__dirname, '../../logs');
+    
+    // Determine log file
+    let filename;
+    if (date) {
+      filename = `${apiName}_${date}.log`;
+    } else {
+      // Get most recent log file for this API
+      const files = await fs.readdir(logDir);
+      const apiFiles = files
+        .filter(f => f.startsWith(`${apiName}_`) && f.endsWith('.log'))
+        .sort()
+        .reverse();
+      
+      if (apiFiles.length === 0) {
+        return res.json({
+          success: true,
+          logs: [],
+          message: 'No logs found for this API'
+        });
+      }
+      
+      filename = apiFiles[0];
+    }
+    
+    const logFilePath = path.join(logDir, filename);
+    
+    // Check if file exists
+    try {
+      await fs.access(logFilePath);
+    } catch (error) {
+      return res.json({
+        success: true,
+        logs: [],
+        message: 'Log file not found'
+      });
+    }
+    
+    // Read log file
+    const content = await fs.readFile(logFilePath, 'utf-8');
+    const lines = content.trim().split('\n').filter(line => line.trim());
+    
+    // Parse JSON lines and limit results
+    const logs = lines
+      .slice(-limit)
+      .map(line => {
+        try {
+          return JSON.parse(line);
+        } catch (e) {
+          return { raw: line, parseError: true };
+        }
+      })
+      .reverse(); // Most recent first
+    
+    res.json({
+      success: true,
+      filename,
+      logs,
+      total: lines.length
+    });
+  } catch (error) {
+    next(error);
+  }
+};

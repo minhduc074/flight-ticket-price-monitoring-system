@@ -300,6 +300,97 @@
           </div>
         </div>
 
+        <!-- API Logs Tab -->
+        <div v-if="activeTab === 'logs'">
+          <div class="bg-white rounded-lg shadow mb-6">
+            <div class="p-4 border-b">
+              <h3 class="text-lg font-semibold">API Request/Response Logs</h3>
+              <p class="text-sm text-gray-500">View detailed logs of all API calls</p>
+            </div>
+            
+            <div class="p-6">
+              <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Log Files List -->
+                <div class="lg:col-span-1">
+                  <h4 class="font-semibold mb-4">Available Logs</h4>
+                  <div class="space-y-2 max-h-96 overflow-y-auto">
+                    <button v-for="log in logs.list" :key="log.filename"
+                            @click="loadLogDetails(log.apiName, log.date)"
+                            :class="['w-full text-left p-3 rounded border',
+                                     logs.selectedApi === log.apiName && logs.selectedDate === log.date
+                                       ? 'bg-blue-50 border-blue-500'
+                                       : 'hover:bg-gray-50 border-gray-200']">
+                      <div class="font-semibold text-sm">{{ log.apiName }}</div>
+                      <div class="text-xs text-gray-500">{{ log.date }}</div>
+                      <div class="text-xs text-gray-400">{{ formatFileSize(log.size) }}</div>
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Log Entries -->
+                <div class="lg:col-span-2">
+                  <div v-if="logs.logEntries.length > 0" class="space-y-4">
+                    <div v-for="(entry, index) in logs.logEntries" :key="index" 
+                         class="border rounded-lg p-4">
+                      <div class="flex items-center justify-between mb-2">
+                        <span :class="['text-sm font-semibold px-2 py-1 rounded',
+                                       entry.type === 'success' 
+                                         ? 'bg-green-100 text-green-800'
+                                         : 'bg-red-100 text-red-800']">
+                          {{ entry.type.toUpperCase() }}
+                        </span>
+                        <span class="text-xs text-gray-500">{{ formatDateTime(entry.timestamp) }}</span>
+                      </div>
+                      
+                      <!-- Request -->
+                      <div class="mb-2">
+                        <div class="text-sm font-semibold text-gray-700 mb-1">Request:</div>
+                        <div class="bg-gray-50 rounded p-2 text-xs overflow-x-auto">
+                          <div><strong>URL:</strong> {{ entry.data.request.url }}</div>
+                          <div v-if="entry.data.request.params && Object.keys(entry.data.request.params).length">
+                            <strong>Params:</strong>
+                            <pre class="mt-1">{{ JSON.stringify(entry.data.request.params, null, 2) }}</pre>
+                          </div>
+                          <div v-if="entry.data.request.body && Object.keys(entry.data.request.body).length">
+                            <strong>Body:</strong>
+                            <pre class="mt-1">{{ JSON.stringify(entry.data.request.body, null, 2) }}</pre>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Response or Error -->
+                      <div v-if="entry.data.error">
+                        <div class="text-sm font-semibold text-red-700 mb-1">Error:</div>
+                        <div class="bg-red-50 rounded p-2 text-xs overflow-x-auto">
+                          <div><strong>Message:</strong> {{ entry.data.error.message }}</div>
+                          <div v-if="entry.data.error.status"><strong>Status:</strong> {{ entry.data.error.status }}</div>
+                          <div v-if="entry.data.error.body">
+                            <strong>Body:</strong>
+                            <pre class="mt-1">{{ JSON.stringify(entry.data.error.body, null, 2) }}</pre>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-else-if="entry.data.response">
+                        <div class="text-sm font-semibold text-gray-700 mb-1">Response:</div>
+                        <div class="bg-gray-50 rounded p-2 text-xs overflow-x-auto">
+                          <div><strong>Status:</strong> {{ entry.data.response.status }}</div>
+                          <div v-if="entry.data.response.body">
+                            <strong>Body:</strong>
+                            <pre class="mt-1">{{ JSON.stringify(entry.data.response.body, null, 2) }}</pre>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="text-center text-gray-500 py-8">
+                    Select a log file to view details
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Users Tab -->
         <div v-if="activeTab === 'users'">
           <div class="bg-white rounded-lg shadow">
@@ -459,12 +550,14 @@
         const tabs = [
           { id: 'dashboard', name: 'Dashboard' },
           { id: 'api-usage', name: 'API Usage' },
+          { id: 'logs', name: 'API Logs' },
           { id: 'users', name: 'Người dùng' },
           { id: 'subscriptions', name: 'Đăng ký theo dõi' }
         ];
 
         const dashboard = ref({});
         const apiUsage = ref({});
+        const logs = ref({ list: [], selectedApi: null, logEntries: [] });
         const users = ref({ list: [], pagination: {} });
         const subscriptions = ref({ list: [], pagination: {} });
         const userSearch = ref('');
@@ -628,6 +721,27 @@
           }
         };
 
+        const loadLogs = async () => {
+          try {
+            const data = await api('/admin/logs');
+            logs.value.list = data.logs;
+          } catch (error) {
+            console.error('Failed to load logs:', error);
+          }
+        };
+
+        const loadLogDetails = async (apiName, date) => {
+          try {
+            const params = new URLSearchParams({ date, limit: '50' });
+            const data = await api(`/admin/logs/${apiName}?${params}`);
+            logs.value.logEntries = data.logs;
+            logs.value.selectedApi = apiName;
+            logs.value.selectedDate = date;
+          } catch (error) {
+            console.error('Failed to load log details:', error);
+          }
+        };
+
         const deleteSubscription = async (sub) => {
           if (!confirm(`Bạn có chắc muốn xóa đăng ký ${sub.from} → ${sub.to} của ${sub.user?.email || 'người dùng này'}?`)) {
             return;
@@ -661,6 +775,18 @@
           return vietDate.toLocaleDateString('vi-VN');
         };
 
+        const formatDateTime = (dateStr) => {
+          if (!dateStr) return 'N/A';
+          const dt = new Date(dateStr);
+          return dt.toLocaleString('vi-VN');
+        };
+
+        const formatFileSize = (bytes) => {
+          if (bytes < 1024) return bytes + ' B';
+          if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
+          return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        };
+
         const getPriceClass = (sub) => {
           if (!sub.currentPrice) return '';
           if (sub.currentPrice <= sub.expectedPrice) return 'text-green-600 font-bold';
@@ -676,6 +802,7 @@
         // Watch tab changes
         watch(activeTab, (newTab) => {
           if (newTab === 'api-usage') loadApiUsage();
+          if (newTab === 'logs') loadLogs();
           if (newTab === 'users') loadUsers();
           if (newTab === 'subscriptions') loadSubscriptions();
         });
@@ -692,6 +819,7 @@
           tabs,
           dashboard,
           apiUsage,
+          logs,
           users,
           subscriptions,
           userSearch,
@@ -701,12 +829,16 @@
           loadUsers,
           loadSubscriptions,
           loadApiUsage,
+          loadLogs,
+          loadLogDetails,
           getApiStat,
           toggleUserStatus,
           triggerPriceCheck,
           deleteSubscription,
           formatPrice,
           formatDate,
+          formatDateTime,
+          formatFileSize,
           getPriceClass,
           debounceLoadUsers
         };

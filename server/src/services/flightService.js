@@ -2,6 +2,8 @@ const axios = require('axios');
 const { prisma } = require('../lib/prisma');
 const config = require('../config');
 const flightScraperService = require('./flightScraperService');
+const fs = require('fs').promises;
+const path = require('path');
 
 class FlightService {
   constructor() {
@@ -12,6 +14,10 @@ class FlightService {
     // RapidAPI key for multiple services
     this.rapidApiKey = process.env.RAPIDAPI_KEY || null;
     this.serpApiKey = process.env.SERPAPI_KEY || null;
+    
+    // Log directory
+    this.logDir = path.join(__dirname, '../../logs');
+    this.initLogDirectory();
     
     // Check if API keys are properly configured (not default values)
     const isValidKey = (key) => key && key !== 'your-rapidapi-key' && key !== 'your-flightapi-key' && key !== 'your-serpapi-key';
@@ -26,7 +32,6 @@ class FlightService {
       { name: 'google-flights', enabled: !!this.rapidApiKey, method: 'fetchFromGoogleFlightsAPI' },
       { name: 'agoda', enabled: !!this.rapidApiKey, method: 'fetchFromAgodaAPI' },
       { name: 'serpapi', enabled: !!this.serpApiKey, method: 'fetchFromSerpAPI' },
-      { name: 'skyscanner', enabled: !!this.rapidApiKey, method: 'fetchFromSkyscannerAPI' },
       { name: 'flightapi', enabled: !!this.betterFlightApiKey, method: 'fetchFromFlightAPI' }
     ];
     
@@ -43,12 +48,81 @@ class FlightService {
   }
 
   /**
+   * Initialize log directory
+   */
+  async initLogDirectory() {
+    try {
+      await fs.mkdir(this.logDir, { recursive: true });
+    } catch (error) {
+      console.error('Failed to create log directory:', error.message);
+    }
+  }
+
+  /**
+   * Write log to file
+   */
+  async writeLog(apiName, logType, data) {
+    try {
+      const timestamp = new Date().toISOString();
+      const date = timestamp.split('T')[0];
+      const logFileName = `${apiName}_${date}.log`;
+      const logFilePath = path.join(this.logDir, logFileName);
+      
+      const logEntry = {
+        timestamp,
+        api: apiName,
+        type: logType,
+        data
+      };
+      
+      const logLine = JSON.stringify(logEntry) + '\n';
+      await fs.appendFile(logFilePath, logLine);
+    } catch (error) {
+      console.error('Failed to write log:', error.message);
+    }
+  }
+
+  /**
+   * Log API request and response
+   */
+  async logApiCall(apiName, request, response, error = null) {
+    const logData = {
+      request,
+      response,
+      error
+    };
+    
+    // Log to console
+    console.log(`\n=== ${apiName.toUpperCase()} REQUEST ===`);
+    console.log('URL:', request.url);
+    if (request.params) console.log('Params:', JSON.stringify(request.params, null, 2));
+    if (request.body) console.log('Body:', JSON.stringify(request.body, null, 2));
+    console.log('Headers:', JSON.stringify(request.headers, null, 2));
+    
+    if (error) {
+      console.log(`\n=== ${apiName.toUpperCase()} ERROR ===`);
+      console.log('Error Message:', error.message);
+      if (error.status) console.log('Error Status:', error.status);
+      if (error.headers) console.log('Error Headers:', JSON.stringify(error.headers, null, 2));
+      if (error.body) console.log('Error Body:', JSON.stringify(error.body, null, 2));
+      console.log(`=== END ${apiName.toUpperCase()} ERROR ===\n`);
+    } else if (response) {
+      console.log('Response Status:', response.status);
+      console.log('Response Body:', JSON.stringify(response.body, null, 2));
+      console.log(`=== END ${apiName.toUpperCase()} REQUEST ===\n`);
+    }
+    
+    // Write to file
+    await this.writeLog(apiName, error ? 'error' : 'success', logData);
+  }
+
+  /**
    * Search for flights between airports on a specific date
    */
   async searchFlights(fromAirport, toAirport, date) {
     try {
-      // First, check if we have recent cached data (within 5 minutes for testing)
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      // Check if we have recent cached data (within 30 minutes)
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
       
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -63,7 +137,7 @@ class FlightService {
             gte: startOfDay,
             lte: endOfDay
           },
-          fetchedAt: { gte: fiveMinutesAgo }
+          fetchedAt: { gte: thirtyMinutesAgo }
         },
         orderBy: { price: 'asc' }
       });
@@ -226,25 +300,38 @@ class FlightService {
       return [];
     }
 
+    const requestUrl = 'https://serpapi.com/search.json';
+    const requestParams = {
+      engine: 'google_flights',
+      departure_id: fromAirport.toUpperCase(),
+      arrival_id: toAirport.toUpperCase(),
+      outbound_date: new Date(date).toISOString().split('T')[0],
+      type: '2',
+      currency: 'VND',
+      hl: 'vi',
+      api_key: this.serpApiKey
+    };
+    
     try {
       const flightDate = new Date(date);
-      const dateStr = flightDate.toISOString().split('T')[0];
       
-      const response = await axios.get('https://serpapi.com/search.json', {
-        params: {
-          engine: 'google_flights',
-          departure_id: fromAirport.toUpperCase(),
-          arrival_id: toAirport.toUpperCase(),
-          outbound_date: dateStr,
-          currency: 'VND',
-          hl: 'vi',
-          api_key: this.serpApiKey
-        },
+      const response = await axios.get(requestUrl, {
+        params: requestParams,
         timeout: 30000
+      });
+      
+      await this.logApiCall('serpapi', {
+        url: requestUrl,
+        params: { ...requestParams, api_key: '***' },
+        headers: {}
+      }, {
+        status: response.status,
+        body: response.data
       });
 
       const flights = [];
       
+      // Parse best_flights
       if (response.data && response.data.best_flights) {
         for (const flight of response.data.best_flights) {
           const firstFlight = flight.flights?.[0];
@@ -260,7 +347,29 @@ class FlightService {
               price: flight.price ? parseInt(flight.price) : 0,
               currency: 'VND',
               classType: 'economy',
-              seatsAvailable: 0,
+              source: 'serpapi',
+              fetchedAt: new Date()
+            });
+          }
+        }
+      }
+      
+      // Also parse other_flights for more options
+      if (response.data && response.data.other_flights) {
+        for (const flight of response.data.other_flights) {
+          const firstFlight = flight.flights?.[0];
+          if (firstFlight) {
+            flights.push({
+              fromAirport: fromAirport.toUpperCase(),
+              toAirport: toAirport.toUpperCase(),
+              date: flightDate,
+              airline: firstFlight.airline || 'Unknown',
+              flightNumber: firstFlight.flight_number || 'N/A',
+              departureTime: firstFlight.departure_airport?.time?.substring(11, 16) || '00:00',
+              arrivalTime: firstFlight.arrival_airport?.time?.substring(11, 16) || '00:00',
+              price: flight.price ? parseInt(flight.price) : 0,
+              currency: 'VND',
+              classType: 'economy',
               source: 'serpapi',
               fetchedAt: new Date()
             });
@@ -270,6 +379,16 @@ class FlightService {
       
       return flights;
     } catch (error) {
+      await this.logApiCall('serpapi', {
+        url: requestUrl,
+        params: { ...requestParams, api_key: '***' },
+        headers: {}
+      }, null, {
+        message: error.message,
+        status: error.response?.status,
+        headers: error.response?.headers,
+        body: error.response?.data
+      });
       throw error;
     }
   }
@@ -282,56 +401,90 @@ class FlightService {
       return [];
     }
 
+    const requestUrl = 'https://agoda-com.p.rapidapi.com/flights/search-one-way';
+    const requestParams = {
+      origin: fromAirport.toUpperCase(),
+      destination: toAirport.toUpperCase(),
+      departureDate: new Date(date).toISOString().split('T')[0]
+    };
+    const requestHeaders = {
+      'x-rapidapi-key': this.rapidApiKey,
+      'x-rapidapi-host': 'agoda-com.p.rapidapi.com'
+    };
+
     try {
       const flightDate = new Date(date);
-      const dateStr = flightDate.toISOString().split('T')[0];
       
       const response = await axios.get(
-        'https://agoda-com.p.rapidapi.com/flights/search-one-way',
+        requestUrl,
         {
-          params: {
-            origin: fromAirport.toUpperCase(),
-            destination: toAirport.toUpperCase(),
-            departureDate: dateStr,
-            adults: '1',
-            cabinClass: 'ECONOMY',
-            currency: 'VND'
-          },
-          headers: {
-            'X-RapidAPI-Key': this.rapidApiKey,
-            'X-RapidAPI-Host': 'agoda-com.p.rapidapi.com'
-          },
+          params: requestParams,
+          headers: requestHeaders,
           timeout: 30000
         }
       );
+      
+      await this.logApiCall('agoda', {
+        url: requestUrl,
+        params: requestParams,
+        headers: { ...requestHeaders, 'x-rapidapi-key': '***' }
+      }, {
+        status: response.status,
+        body: response.data
+      });
 
       const flights = [];
       
-      if (response.data && response.data.data && response.data.data.results) {
-        for (const result of response.data.data.results) {
-          const leg = result.legs?.[0];
-          if (leg) {
-            flights.push({
-              fromAirport: fromAirport.toUpperCase(),
-              toAirport: toAirport.toUpperCase(),
-              date: flightDate,
-              airline: leg.airline?.name || 'Unknown',
-              flightNumber: leg.flightNumber || 'N/A',
-              departureTime: leg.departure?.time?.substring(11, 16) || '00:00',
-              arrivalTime: leg.arrival?.time?.substring(11, 16) || '00:00',
-              price: result.price?.amount ? parseInt(result.price.amount) : 0,
-              currency: 'VND',
-              classType: 'economy',
-              seatsAvailable: 0,
-              source: 'agoda',
-              fetchedAt: new Date()
-            });
-          }
+      // Parse Agoda response - handle multiple response structures
+      const resultList = response.data?.flights?.resultList || 
+                        response.data?.data?.resultList || 
+                        [];
+      
+      for (const result of resultList) {
+        const outboundSlice = result.outboundSlice;
+        const segments = outboundSlice?.segments || [];
+        const firstSegment = segments[0];
+        
+        // Get price from various possible locations
+        const priceOption = result.priceOptions?.[0] || result.defaultPriceOption;
+        const price = priceOption?.price?.display?.perBook?.allInclusive || 
+                     priceOption?.price?.display?.averagePerPax?.allInclusive ||
+                     result.price?.display?.perBook?.allInclusive || 0;
+        
+        if (firstSegment) {
+          flights.push({
+            fromAirport: fromAirport.toUpperCase(),
+            toAirport: toAirport.toUpperCase(),
+            date: flightDate,
+            airline: firstSegment.carrierContent?.carrierName || 
+                    firstSegment.operatingCarrierContent?.carrierName || 'Unknown',
+            flightNumber: firstSegment.flightNumber || 'N/A',
+            departureTime: firstSegment.departDateTime?.substring(11, 16) || '00:00',
+            arrivalTime: firstSegment.arrivalDateTime?.substring(11, 16) || '00:00',
+            duration: outboundSlice.duration || null,
+            stops: segments.length - 1,
+            price: Math.round(price),
+            currency: 'USD',
+            classType: 'economy',
+            source: 'agoda',
+            fetchedAt: new Date()
+          });
         }
       }
       
+      console.log(`Agoda parsed ${flights.length} flights from ${resultList.length} results`);
       return flights;
     } catch (error) {
+      await this.logApiCall('agoda', {
+        url: requestUrl,
+        params: requestParams,
+        headers: { ...requestHeaders, 'x-rapidapi-key': '***' }
+      }, null, {
+        message: error.message,
+        status: error.response?.status,
+        headers: error.response?.headers,
+        body: error.response?.data
+      });
       throw error;
     }
   }
@@ -344,14 +497,25 @@ class FlightService {
       return [];
     }
 
+    const flightDate = new Date(date);
+    const dateStr = flightDate.toISOString().split('T')[0];
+    const requestUrl = `${this.betterFlightApiUrl}/${this.betterFlightApiKey}/${fromAirport}/${toAirport}/${dateStr}/1/0/0/Economy/VND`;
+    const maskedUrl = requestUrl.replace(this.betterFlightApiKey, '***');
+
     try {
-      const flightDate = new Date(date);
-      const dateStr = flightDate.toISOString().split('T')[0];
-      
       const response = await axios.get(
-        `${this.betterFlightApiUrl}/${this.betterFlightApiKey}/${fromAirport}/${toAirport}/${dateStr}/1/0/0/Economy/VND`,
+        requestUrl,
         { timeout: 30000 }
       );
+      
+      await this.logApiCall('flightapi', {
+        url: maskedUrl,
+        params: {},
+        headers: {}
+      }, {
+        status: response.status,
+        body: response.data
+      });
 
       const flights = [];
       
@@ -370,7 +534,6 @@ class FlightService {
               price: itinerary.price?.amount || 0,
               currency: 'VND',
               classType: 'economy',
-              seatsAvailable: 0,
               source: 'flightapi',
               fetchedAt: new Date()
             });
@@ -380,7 +543,16 @@ class FlightService {
       
       return flights;
     } catch (error) {
-      console.log('FlightAPI.io error:', error.message);
+      await this.logApiCall('flightapi', {
+        url: maskedUrl,
+        params: {},
+        headers: {}
+      }, null, {
+        message: error.message,
+        status: error.response?.status,
+        headers: error.response?.headers,
+        body: error.response?.data
+      });
       return [];
     }
   }
@@ -393,139 +565,113 @@ class FlightService {
       return [];
     }
 
+    const requestUrl = 'https://google-flights2.p.rapidapi.com/api/v1/searchFlights';
+    const requestParams = {
+      departure_id: fromAirport.toUpperCase(),
+      arrival_id: toAirport.toUpperCase(),
+      outbound_date: new Date(date).toISOString().split('T')[0],
+      travel_class: 'ECONOMY',
+      adults: '1',
+      show_hidden: '1',
+      currency: 'USD',
+      language_code: 'en-US',
+      country_code: 'US',
+      search_type: 'best'
+    };
+    const requestHeaders = {
+      'x-rapidapi-key': this.rapidApiKey,
+      'x-rapidapi-host': 'google-flights2.p.rapidapi.com'
+    };
+
     try {
       const flightDate = new Date(date);
-      const dateStr = flightDate.toISOString().split('T')[0];
       
       const response = await axios.get(
-        'https://google-flights2.p.rapidapi.com/api/v1/searchFlights',
+        requestUrl,
         {
-          params: {
-            departure_id: fromAirport.toUpperCase(),
-            arrival_id: toAirport.toUpperCase(),
-            outbound_date: dateStr,
-            travel_class: 'ECONOMY',
-            adults: '1',
-            show_hidden: '1',
-            currency: 'VND',
-            language_code: 'vi-VN',
-            country_code: 'VN',
-            search_type: 'best'
-          },
-          headers: {
-            'X-RapidAPI-Key': this.rapidApiKey,
-            'X-RapidAPI-Host': 'google-flights2.p.rapidapi.com'
-          },
+          params: requestParams,
+          headers: requestHeaders,
           timeout: 30000
         }
       );
+      
+      await this.logApiCall('google-flights', {
+        url: requestUrl,
+        params: requestParams,
+        headers: { ...requestHeaders, 'x-rapidapi-key': '***' }
+      }, {
+        status: response.status,
+        body: response.data
+      });
 
       const flights = [];
       
-      if (response.data && response.data.data && response.data.data.flights) {
-        for (const flight of response.data.data.flights) {
-          const firstLeg = flight.legs?.[0];
-          if (firstLeg) {
-            flights.push({
-              fromAirport: fromAirport.toUpperCase(),
-              toAirport: toAirport.toUpperCase(),
-              date: flightDate,
-              airline: firstLeg.carriers?.[0]?.name || firstLeg.airline_name || 'Unknown',
-              flightNumber: firstLeg.flight_number || 'N/A',
-              departureTime: firstLeg.departure_time?.substring(11, 16) || '00:00',
-              arrivalTime: firstLeg.arrival_time?.substring(11, 16) || '00:00',
-              price: flight.price ? parseInt(flight.price) : 0,
-              currency: 'VND',
-              classType: 'economy',
-              seatsAvailable: 0,
-              source: 'google-flights',
-              fetchedAt: new Date()
-            });
-          }
+      // Parse flights from various possible response structures
+      const flightsList = response.data?.data?.flights || 
+                         response.data?.data?.itineraries ||
+                         response.data?.flights ||
+                         response.data?.best_flights ||
+                         [];
+      
+      for (const flight of flightsList) {
+        const firstLeg = flight.legs?.[0] || flight.flights?.[0];
+        if (firstLeg) {
+          flights.push({
+            fromAirport: fromAirport.toUpperCase(),
+            toAirport: toAirport.toUpperCase(),
+            date: flightDate,
+            airline: firstLeg.carriers?.[0]?.name || firstLeg.airline_name || firstLeg.airline || 'Unknown',
+            flightNumber: firstLeg.flight_number || firstLeg.flightNumber || 'N/A',
+            departureTime: (firstLeg.departure_time || firstLeg.departure)?.substring(11, 16) || '00:00',
+            arrivalTime: (firstLeg.arrival_time || firstLeg.arrival)?.substring(11, 16) || '00:00',
+            duration: flight.total_duration || firstLeg.duration || null,
+            stops: (flight.legs?.length || 1) - 1,
+            price: flight.price ? parseInt(flight.price) : 0,
+            currency: 'USD',
+            classType: 'economy',
+            source: 'google-flights',
+            fetchedAt: new Date()
+          });
         }
       }
       
-      return flights;
-    } catch (error) {
-      console.log('Google Flights API error:', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * Fetch from Skyscanner via RapidAPI
-   */
-  async fetchFromSkyscannerAPI(fromAirport, toAirport, date) {
-    if (!this.rapidApiKey) {
-      return [];
-    }
-
-    try {
-      const flightDate = new Date(date);
-      const dateStr = flightDate.toISOString().split('T')[0];
-      
-      // Create search session
-      const sessionResponse = await axios.post(
-        'https://skyscanner-api.p.rapidapi.com/v3/flights/live/search/create',
-        {
-          query: {
-            market: 'VN',
-            locale: 'vi-VN',
-            currency: 'VND',
-            queryLegs: [{
-              originPlaceId: { iata: fromAirport.toUpperCase() },
-              destinationPlaceId: { iata: toAirport.toUpperCase() },
-              date: { year: flightDate.getFullYear(), month: flightDate.getMonth() + 1, day: flightDate.getDate() }
-            }],
-            adults: 1,
-            cabinClass: 'CABIN_CLASS_ECONOMY'
-          }
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-RapidAPI-Key': this.rapidApiKey,
-            'X-RapidAPI-Host': 'skyscanner-api.p.rapidapi.com'
-          },
-          timeout: 30000
-        }
-      );
-
-      const flights = [];
-      const data = sessionResponse.data;
-      
-      if (data?.content?.results?.itineraries) {
-        for (const [id, itinerary] of Object.entries(data.content.results.itineraries)) {
-          const legId = itinerary.legIds?.[0];
-          const leg = data.content.results.legs?.[legId];
-          const pricingOption = itinerary.pricingOptions?.[0];
-          
-          if (leg && pricingOption) {
-            const carrierId = leg.operatingCarrierIds?.[0];
-            const carrier = data.content.results.carriers?.[carrierId];
-            
-            flights.push({
-              fromAirport: fromAirport.toUpperCase(),
-              toAirport: toAirport.toUpperCase(),
-              date: flightDate,
-              airline: carrier?.name || 'Unknown',
-              flightNumber: leg.segments?.[0]?.flightNumber || 'N/A',
-              departureTime: leg.departureDateTime?.substring(11, 16) || '00:00',
-              arrivalTime: leg.arrivalDateTime?.substring(11, 16) || '00:00',
-              price: pricingOption.price?.amount ? parseInt(pricingOption.price.amount) : 0,
-              currency: 'VND',
-              classType: 'economy',
-              seatsAvailable: 0,
-              source: 'skyscanner',
-              fetchedAt: new Date()
-            });
-          }
+      // Also check for other_flights
+      const otherFlights = response.data?.data?.other_flights || response.data?.other_flights || [];
+      for (const flight of otherFlights) {
+        const firstLeg = flight.legs?.[0] || flight.flights?.[0];
+        if (firstLeg) {
+          flights.push({
+            fromAirport: fromAirport.toUpperCase(),
+            toAirport: toAirport.toUpperCase(),
+            date: flightDate,
+            airline: firstLeg.carriers?.[0]?.name || firstLeg.airline_name || firstLeg.airline || 'Unknown',
+            flightNumber: firstLeg.flight_number || firstLeg.flightNumber || 'N/A',
+            departureTime: (firstLeg.departure_time || firstLeg.departure)?.substring(11, 16) || '00:00',
+            arrivalTime: (firstLeg.arrival_time || firstLeg.arrival)?.substring(11, 16) || '00:00',
+            duration: flight.total_duration || firstLeg.duration || null,
+            stops: (flight.legs?.length || 1) - 1,
+            price: flight.price ? parseInt(flight.price) : 0,
+            currency: 'USD',
+            classType: 'economy',
+            source: 'google-flights',
+            fetchedAt: new Date()
+          });
         }
       }
       
+      console.log(`Google Flights parsed ${flights.length} flights`);
       return flights;
     } catch (error) {
-      console.log('Skyscanner API error:', error.message);
+      await this.logApiCall('google-flights', {
+        url: requestUrl,
+        params: requestParams,
+        headers: { ...requestHeaders, 'x-rapidapi-key': '***' }
+      }, null, {
+        message: error.message,
+        status: error.response?.status,
+        headers: error.response?.headers,
+        body: error.response?.data
+      });
       return [];
     }
   }

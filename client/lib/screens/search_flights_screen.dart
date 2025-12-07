@@ -19,7 +19,7 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
   Airport? _toAirport;
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 7));
   int _expectedPrice = 1500000;
-  
+
   List<Flight> _flights = [];
   bool _isSearching = false;
   bool _isCreating = false;
@@ -31,7 +31,7 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
   void initState() {
     super.initState();
     _priceController.text = _formatNumber(_expectedPrice);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<SubscriptionProvider>(context, listen: false).loadAirports();
     });
@@ -190,12 +190,13 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                       children: [
                         Text(
                           'Thông tin chuyến bay',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // From
                         DropdownSearch<Airport>(
                           popupProps: PopupProps.menu(
@@ -208,7 +209,8 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                             ),
                           ),
                           items: provider.airports,
-                          itemAsString: (airport) => '${airport.city} (${airport.code})',
+                          itemAsString: (airport) =>
+                              '${airport.city} (${airport.code})',
                           onChanged: (airport) {
                             setState(() {
                               _fromAirport = airport;
@@ -223,7 +225,7 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // To
                         DropdownSearch<Airport>(
                           popupProps: PopupProps.menu(
@@ -236,7 +238,8 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                             ),
                           ),
                           items: provider.airports,
-                          itemAsString: (airport) => '${airport.city} (${airport.code})',
+                          itemAsString: (airport) =>
+                              '${airport.city} (${airport.code})',
                           onChanged: (airport) {
                             setState(() {
                               _toAirport = airport;
@@ -251,7 +254,7 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Date
                         InkWell(
                           onTap: _showDatePicker,
@@ -296,10 +299,13 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                           Row(
                             children: [
                               Text(
-                                'Kết quả tìm kiếm',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                                'Kết quả tìm kiếm (${_flights.length})',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                               ),
                               const Spacer(),
                               if (_currentLowestPrice != null)
@@ -323,7 +329,8 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                             ],
                           ),
                           const SizedBox(height: 12),
-                          ...(_flights.take(5).map((flight) => _buildFlightTile(flight))),
+                          ...(_flights
+                              .map((flight) => _buildFlightTile(flight))),
                         ],
                       ),
                     ),
@@ -340,9 +347,10 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                       children: [
                         Text(
                           'Đăng ký theo dõi giá',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -350,7 +358,7 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                           style: TextStyle(color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Expected Price
                         TextFormField(
                           controller: _priceController,
@@ -358,7 +366,8 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                           decoration: InputDecoration(
                             labelText: 'Giá kỳ vọng (VNĐ)',
                             prefixIcon: Icon(Icons.attach_money),
-                            helperText: 'Bạn sẽ nhận thông báo khi giá ≤ mức này',
+                            helperText:
+                                'Bạn sẽ nhận thông báo khi giá ≤ mức này',
                           ),
                           onChanged: (value) {
                             final number = int.tryParse(
@@ -381,20 +390,25 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                             1500000,
                             2000000,
                             2500000,
-                          ].map((price) => OutlinedButton(
-                            onPressed: () {
-                              setState(() {
-                                _expectedPrice = price;
-                                _priceController.text = _formatNumber(price);
-                              });
-                            },
-                            style: OutlinedButton.styleFrom(
-                              backgroundColor: _expectedPrice == price
-                                  ? Theme.of(context).colorScheme.primaryContainer
-                                  : null,
-                            ),
-                            child: Text(_formatPrice(price)),
-                          )).toList(),
+                          ]
+                              .map((price) => OutlinedButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _expectedPrice = price;
+                                        _priceController.text =
+                                            _formatNumber(price);
+                                      });
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      backgroundColor: _expectedPrice == price
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .primaryContainer
+                                          : null,
+                                    ),
+                                    child: Text(_formatPrice(price)),
+                                  ))
+                              .toList(),
                         ),
                         const SizedBox(height: 24),
 
@@ -409,13 +423,17 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                                      valueColor:
+                                          AlwaysStoppedAnimation(Colors.white),
                                     ),
                                   )
                                 : Icon(Icons.notifications_active),
-                            label: Text(_isCreating ? 'Đang tạo...' : 'Đăng ký theo dõi'),
+                            label: Text(_isCreating
+                                ? 'Đang tạo...'
+                                : 'Đăng ký theo dõi'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
                               foregroundColor: Colors.white,
                             ),
                           ),
@@ -470,7 +488,9 @@ class _SearchFlightsScreenState extends State<SearchFlightsScreen> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
               ),
-              if (flight.seatsAvailable != null)
+              if (flight.seatsAvailable != null &&
+                  flight.seatsAvailable! > 0)
+                 
                 Text(
                   'Còn ${flight.seatsAvailable} chỗ',
                   style: TextStyle(

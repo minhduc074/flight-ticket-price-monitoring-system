@@ -30,4 +30,8 @@ router.post('/trigger-price-check', adminController.triggerPriceCheck);
 // Database sync (for initial deployment)
 router.post('/sync-db', adminController.syncDatabase);
 
+// API Logs
+router.get('/logs', adminController.getApiLogs);
+router.get('/logs/:apiName', adminController.getApiLogsByName);
+
 module.exports = router;
